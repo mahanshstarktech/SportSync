@@ -1,0 +1,15 @@
+{
+  "name": "sportsync-monorepo",
+  "version": "2.0.0",
+  "description": "SportSync Platform Monorepo Entry for Render and Cloudflare",
+  "main": "server/server.js",
+  "scripts": {
+    "postinstall": "cd server && npm install",
+    "build": "cd server && npm install",
+    "start": "node server/server.js",
+    "server": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
