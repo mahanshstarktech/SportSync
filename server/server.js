@@ -90,9 +90,14 @@ app.use("/api", (req, res, next) => {
   const mongoose = require("mongoose");
   // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
   if (mongoose.connection.readyState !== 1) {
+    const isUriConfigured = !!process.env.MONGO_URI && !process.env.MONGO_URI.includes("127.0.0.1");
+    const advice = !isUriConfigured
+      ? "MongoDB Atlas URI is not set. Please add MONGO_URI in Render Dashboard -> Environment Variables."
+      : "Connecting to MongoDB Atlas... If this persists, ensure MongoDB Atlas Network Access is set to 0.0.0.0/0 (Allow from anywhere).";
+
     return res.status(503).json({
       success: false,
-      msg: "SportSync database is waking up or connecting. Please retry in a few seconds.",
+      msg: advice,
       dbState: mongoose.connection.readyState
     });
   }

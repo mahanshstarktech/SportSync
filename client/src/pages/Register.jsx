@@ -267,13 +267,6 @@ export default function Register() {
       <div className="relative z-10 w-full max-w-md sm:max-w-lg lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
         {/* Left Column: Brand Showcase (Desktop/Large Screens) */}
         <div className="hidden lg:flex lg:col-span-6 xl:col-span-7 flex-col items-start text-left px-4 2xl:px-8">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800/60 mb-5 backdrop-blur-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] 2xl:text-xs font-semibold tracking-wider uppercase text-blue-600 dark:text-blue-400">
-              Join SportSync
-            </span>
-          </div>
-
           <h1 className="text-4xl xl:text-5xl 2xl:text-6xl 3xl:text-7xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.12]">
             Create Your <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-500 dark:from-blue-400 dark:via-indigo-300 dark:to-cyan-300">
@@ -378,7 +371,7 @@ export default function Register() {
                         id="reg-name"
                         type="text"
                         autoComplete="name"
-                        placeholder="Mahansh Gaur"
+                        placeholder="John Doe"
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         required
