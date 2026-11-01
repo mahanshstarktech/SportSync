@@ -82,16 +82,78 @@ function getAppleEmailTemplate(name, otp) {
 }
 
 /**
- * Deliver via Resend HTTPS REST API (Port 443 - Never Blocked by Cloud Firewalls)
+ * Deliver via Google SMTP (Gmail) with Nodemailer
+ */
+async function sendViaGoogleSmtp(email, name, otp) {
+  const user = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : "";
+  const pass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "").trim() : "";
+
+  if (!user || !pass) {
+    return {
+      success: false,
+      delivered: false,
+      error: "Google SMTP credentials missing: Please set EMAIL_USER and EMAIL_PASS in Render.",
+    };
+  }
+
+  try {
+    console.log(`[Google SMTP] Initializing Gmail transporter for ${user}...`);
+
+    // Official Gmail service configuration in Nodemailer
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user,
+        pass,
+      },
+      connectionTimeout: 10000, // 10s connection limit
+      greetingTimeout: 8000,
+      socketTimeout: 12000,
+    });
+
+    const fromAddress = process.env.EMAIL_FROM || `"SportSync" <${user}>`;
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              "Gmail SMTP timeout. Please ensure your 16-character Google App Password is correct."
+            )
+          ),
+        12000
+      )
+    );
+
+    const sendPromise = transporter.sendMail({
+      from: fromAddress,
+      to: email.toLowerCase().trim(),
+      subject: `Your SportSync Verification Code: ${otp}`,
+      text: `Hello ${name},\n\nYour SportSync verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nSportSync Team`,
+      html: getAppleEmailTemplate(name, otp),
+    });
+
+    const info = await Promise.race([sendPromise, timeoutPromise]);
+    console.log(`[Google SMTP] ✅ Real email delivered to ${email} (MessageId: ${info.messageId})`);
+    return { success: true, delivered: true, messageId: info.messageId };
+  } catch (err) {
+    console.error(`[Google SMTP] ❌ Delivery failed to ${email}:`, err.message);
+    let friendlyError = err.message;
+    if (err.message.includes("Invalid login") || err.message.includes("535") || err.message.includes("Username and Password not accepted")) {
+      friendlyError = "Google rejected login credentials. Please ensure 2-Step Verification is ON and you are using a 16-character App Password (not your normal Gmail password).";
+    }
+    return { success: false, delivered: false, error: friendlyError };
+  }
+}
+
+/**
+ * Deliver via Resend HTTPS REST API (Secondary / Fallback)
  */
 async function sendViaResendHttp(apiKey, email, name, otp) {
   try {
-    // Note: Resend test domain must be strictly 'onboarding@resend.dev'
     const fromAddress = process.env.EMAIL_FROM || "onboarding@resend.dev";
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
-
-    console.log(`[Email Service] Sending Resend HTTP POST to https://api.resend.com/emails for ${email}...`);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -112,116 +174,54 @@ async function sendViaResendHttp(apiKey, email, name, otp) {
     const data = await res.json();
 
     if (res.ok && data?.id) {
-      console.log(`[Email Service] ✅ Real email sent via Resend HTTPS to ${email} (Id: ${data.id})`);
+      console.log(`[Resend HTTP] ✅ Real email sent to ${email} (Id: ${data.id})`);
       return { success: true, delivered: true, id: data.id };
     } else {
-      console.error("[Email Service] ⚠️ Resend API returned error:", data);
       const detail = data?.message || data?.error || JSON.stringify(data);
       return { success: false, delivered: false, error: `Resend API: ${detail}` };
     }
   } catch (err) {
-    console.error("[Email Service] ⚠️ Resend HTTPS request failed:", err.message);
     return { success: false, delivered: false, error: `Resend Network Error: ${err.message}` };
   }
 }
 
 /**
- * Deliver via Nodemailer (Gmail / SMTP) with strict timeouts (max 6s)
- */
-async function sendViaSmtpWithTimeout(email, name, otp) {
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "").trim() : "";
-
-  if (!user || !pass) {
-    return { success: false, delivered: false, error: "Missing EMAIL_USER or EMAIL_PASS" };
-  }
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT) || 465,
-    secure: Number(process.env.SMTP_PORT) === 465 || !process.env.SMTP_PORT, // true for 465
-    auth: { user, pass },
-    connectionTimeout: 5000,
-    greetingTimeout: 4000,
-    socketTimeout: 5000,
-  });
-
-  const fromAddress = process.env.EMAIL_FROM || `"SportSync" <${user}>`;
-
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error("SMTP connection timed out. Cloud host restricted outbound SMTP ports (587/465).")), 6000)
-  );
-
-  const sendPromise = transporter.sendMail({
-    from: fromAddress,
-    to: email,
-    subject: `Your SportSync Verification Code: ${otp}`,
-    text: `Hello ${name},\n\nYour SportSync verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nSportSync Team`,
-    html: getAppleEmailTemplate(name, otp),
-  });
-
-  return await Promise.race([sendPromise, timeoutPromise])
-    .then((info) => {
-      console.log(`[Email Service] ✅ Real email sent via SMTP to ${email} (MessageId: ${info.messageId})`);
-      return { success: true, delivered: true, messageId: info.messageId };
-    })
-    .catch((err) => {
-      console.error(`[Email Service] ⚠️ SMTP failed for ${email}:`, err.message);
-      return { success: false, delivered: false, error: err.message };
-    });
-}
-
-/**
- * High-Performance Resilient Email Dispatcher
- * Priority:
- * 1. Resend HTTPS REST API (Port 443 — fast, reliable on Render)
- * 2. SMTP / Gmail (with 6s timeout guard)
- * Strict Production Enforcement: Never fake delivery or leak OTP in API response.
+ * High-Performance Email Dispatcher
+ * Primary #1: Google SMTP (Nodemailer)
+ * Secondary #2: Resend HTTPS (if configured)
  */
 async function sendOtpEmail(email, name, otp) {
   let lastError = "";
 
-  // 1. Try Resend HTTPS API if key present
+  // 1. Primary: Google SMTP (Gmail)
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    console.log(`[Email Service] Delivering via Google SMTP for ${email}...`);
+    const smtpResult = await sendViaGoogleSmtp(email, name, otp);
+    if (smtpResult.success) {
+      return smtpResult;
+    }
+    lastError = `Google SMTP: ${smtpResult.error}`;
+  } else {
+    lastError = "Google SMTP not configured (EMAIL_USER & EMAIL_PASS missing in Render).";
+  }
+
+  // 2. Secondary: Resend HTTPS API (if configured)
   if (process.env.RESEND_API_KEY) {
-    console.log(`[Email Service] Attempting delivery via Resend HTTPS for ${email}...`);
+    console.log(`[Email Service] Trying secondary Resend HTTPS for ${email}...`);
     const resendResult = await sendViaResendHttp(process.env.RESEND_API_KEY, email, name, otp);
     if (resendResult.success) {
       return resendResult;
     }
-    lastError = resendResult.error;
-    console.warn(`[Email Service] Resend HTTPS delivery failed: ${lastError}`);
-  } else {
-    console.warn("[Email Service] ⚠️ RESEND_API_KEY is not configured in Render Environment Variables.");
+    lastError = `${lastError} | Resend: ${resendResult.error}`;
   }
 
-  // 2. Try SMTP if credentials present
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    console.log(`[Email Service] Attempting delivery via SMTP for ${email}...`);
-    const smtpResult = await sendViaSmtpWithTimeout(email, name, otp);
-    if (smtpResult.success) {
-      return smtpResult;
-    }
-    lastError = lastError ? `${lastError}; SMTP: ${smtpResult.error}` : smtpResult.error;
-    console.warn(`[Email Service] SMTP delivery failed: ${smtpResult.error}`);
-  }
-
-  // 3. Strict failure handling — No OTP leak to frontend
-  const hasResend = !!process.env.RESEND_API_KEY;
-  const hasSmtp = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
-
-  let failureMsg = "Email service not configured. Please set RESEND_API_KEY in Render Environment Variables.";
-  if (hasResend) {
-    failureMsg = `Resend delivery failed: ${lastError}. (Note: On Resend's free trial domain onboarding@resend.dev, you can only send to the email address registered on your Resend account).`;
-  } else if (hasSmtp) {
-    failureMsg = `SMTP delivery failed: ${lastError}.`;
-  }
-
-  console.error(`[Email Service] ❌ Final email delivery failure for ${email}: ${failureMsg}`);
+  // 3. Strict failure response — No OTP leak
+  console.error(`[Email Service] ❌ Failed to dispatch verification email to ${email}: ${lastError}`);
 
   return {
     success: false,
     delivered: false,
-    error: failureMsg,
+    error: lastError,
   };
 }
 

@@ -23,13 +23,13 @@ if (!process.env.MONGO_URI) {
   console.warn("⚠️ Warning: MONGO_URI not set. Set MONGO_URI in Render Dashboard for persistent Atlas DB.");
 }
 
-// 📧 Email Service diagnostic check
-if (process.env.RESEND_API_KEY) {
+// 📧 Email Service diagnostic check (Google SMTP Primary)
+if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  console.log(`✅ Email Provider: Google SMTP (Configured as ${process.env.EMAIL_USER})`);
+} else if (process.env.RESEND_API_KEY) {
   console.log("✅ Email Provider: Resend HTTPS API (Configured)");
-} else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-  console.log("✅ Email Provider: SMTP (Configured)");
 } else {
-  console.warn("⚠️ Warning: Neither RESEND_API_KEY nor EMAIL_USER/EMAIL_PASS is configured in Render environment variables.");
+  console.warn("⚠️ Warning: Google SMTP is not configured. Please set EMAIL_USER & EMAIL_PASS in Render Environment Variables.");
 }
 
 // ✅ Connect DB (asynchronously, with auto-retry)
