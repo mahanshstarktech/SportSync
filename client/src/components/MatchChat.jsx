@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-import API from "../services/api";
-import { BASE_URL } from "../services/api";
+import { ArrowUp, Lock, Unlock, Users, ShieldAlert } from "lucide-react";
+import API, { BASE_URL } from "../services/api";
 
 let socket = null;
 
-function MatchChat({ matchId, isApproved, isHost }) {
+export default function MatchChat({ matchId, isApproved, isHost }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [connected, setConnected] = useState(false);
@@ -20,7 +20,11 @@ function MatchChat({ matchId, isApproved, isHost }) {
   useEffect(() => {
     if (!isApproved || !token) return;
 
-socket = io(BASE_URL, { auth: { token } });
+    socket = io(BASE_URL, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+    });
+
     socket.on("connect", () => {
       setConnected(true);
       socket.emit("joinMatchRoom", { matchId });
@@ -34,15 +38,12 @@ socket = io(BASE_URL, { auth: { token } });
       setMessages((prev) => [...prev, msg]);
     });
 
-    // ✅ Receive visibility state
     socket.on("chatVisibility", ({ chatOpenForAll }) => {
       setChatOpenForAll(chatOpenForAll);
     });
 
-    // ✅ When host toggles — update all connected clients
     socket.on("chatVisibilityChanged", ({ chatOpenForAll }) => {
       setChatOpenForAll(chatOpenForAll);
-      // Reload messages according to new visibility
       socket.emit("joinMatchRoom", { matchId });
     });
 
@@ -62,22 +63,19 @@ socket = io(BASE_URL, { auth: { token } });
   const sendMessage = (e) => {
     e.preventDefault();
     if (!text.trim() || !socket) return;
-    socket.emit("sendMessage", { matchId, text });
+    socket.emit("sendMessage", { matchId, text: text.trim() });
     setText("");
   };
 
-  // ✅ Host toggles chat visibility
   const handleToggleChat = async () => {
     try {
       setToggling(true);
       const res = await API.post(`/matches/${matchId}/toggle-chat`);
       setChatOpenForAll(res.data.chatOpenForAll);
-      // Notify all clients in room
       socket?.emit("notifyChatToggle", { matchId, chatOpenForAll: res.data.chatOpenForAll });
-      // Reload history
       socket?.emit("joinMatchRoom", { matchId });
     } catch (err) {
-      alert(err.response?.data?.msg || "Failed to toggle chat");
+      alert(err.response?.data?.msg || "Failed to toggle chat visibility");
     } finally {
       setToggling(false);
     }
@@ -85,153 +83,138 @@ socket = io(BASE_URL, { auth: { token } });
 
   if (!isApproved) {
     return (
-      <div style={{
-        marginTop: 20, padding: 16, borderRadius: 12,
-        background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
-        textAlign: "center", fontSize: 13, color: "#f59e0b"
-      }}>
-        Chat is only available for approved players.
+      <div className="mt-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center justify-center gap-2">
+        <ShieldAlert className="w-4 h-4 shrink-0" />
+        <span>Match squad chat is reserved for approved participating athletes.</span>
       </div>
     );
   }
 
   return (
-    <div style={{ marginTop: 24 }}>
+    <div className="mt-6 apple-double-bezel shadow-lg">
+      <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-4 sm:p-6 space-y-4">
+        {/* Chat Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-black/5 dark:border-white/10">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Squad Channel
+            </h3>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                connected
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "bg-slate-500/10 text-slate-500"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+              <span>{connected ? "Live" : "Connecting"}</span>
+            </span>
+          </div>
 
-      {/* Chat header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <h2 style={{ fontFamily: "Outfit, sans-serif", fontWeight: 600, fontSize: 16, color: "var(--text-primary)" }}>
-            Match Chat
-          </h2>
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20,
-            background: connected ? "rgba(34,197,94,0.1)" : "rgba(148,163,184,0.1)",
-            color: connected ? "var(--success)" : "var(--text-muted)"
-          }}>
-            {connected ? "Live" : "Connecting..."}
-          </span>
+          {isHost && (
+            <button
+              type="button"
+              onClick={handleToggleChat}
+              disabled={toggling}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                chatOpenForAll
+                  ? "bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20"
+                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+              }`}
+            >
+              {chatOpenForAll ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+              <span>{chatOpenForAll ? "Restrict to Host" : "Open for Squad"}</span>
+            </button>
+          )}
         </div>
 
-        {/* ✅ Host chat visibility toggle */}
-        {isHost && (
-          <button
-            onClick={handleToggleChat}
-            disabled={toggling}
-            style={{
-              fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 8,
-              border: "none", cursor: toggling ? "not-allowed" : "pointer",
-              background: chatOpenForAll ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)",
-              color: chatOpenForAll ? "var(--danger)" : "var(--success)",
-              transition: "all 0.15s"
-            }}
-          >
-            {toggling ? "..." : chatOpenForAll ? "🔒 Make Private" : "🔓 Open for All"}
-          </button>
-        )}
-      </div>
-
-      {/* Visibility banner for players */}
-      {!isHost && (
-        <div style={{
-          fontSize: 12, padding: "6px 12px", borderRadius: 8, marginBottom: 10,
-          background: chatOpenForAll ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
-          color: chatOpenForAll ? "var(--success)" : "#f59e0b",
-          border: `1px solid ${chatOpenForAll ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`
-        }}>
-          {chatOpenForAll
-            ? "🔓 Chat is open — all player messages are visible"
-            : "🔒 Chat is restricted — only host messages are visible to you"}
-        </div>
-      )}
-
-      {error && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 8 }}>{error}</p>}
-
-      {/* Messages */}
-      <div style={{
-        background: "var(--bg-primary)", border: "1px solid var(--border)",
-        borderRadius: 16, padding: 12, height: 280,
-        overflowY: "auto", display: "flex", flexDirection: "column", gap: 8
-      }}>
-        {messages.length === 0 && (
-          <p style={{ color: "var(--text-muted)", fontSize: 13, textAlign: "center", margin: "auto" }}>
-            No messages yet. Say hello!
-          </p>
+        {/* Visibility banner */}
+        {!isHost && (
+          <div className="text-[11px] px-3 py-1.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span>
+              {chatOpenForAll
+                ? "Open Squad Chat — All approved player messages visible."
+                : "Restricted Broadcast — Only match host announcements visible."}
+            </span>
+          </div>
         )}
 
-        {messages.map((msg) => {
-          const isMe = msg.sender?._id === userId || msg.sender === userId;
-          const isHostMsg = msg.isHostMessage;
-          const onlyMe = msg.onlyVisibleToSelf;
+        {error && (
+          <p className="text-xs text-red-500 font-semibold">{error}</p>
+        )}
 
-          return (
-            <div key={msg._id} style={{
-              display: "flex", flexDirection: "column",
-              alignItems: isMe ? "flex-end" : "flex-start",
-              maxWidth: "75%", alignSelf: isMe ? "flex-end" : "flex-start"
-            }}>
-              {!isMe && (
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                  <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 4 }}>
-                    {msg.sender?.name || "Player"}
-                  </span>
-                  {isHostMsg && (
-                    <span style={{ fontSize: 10, background: "rgba(59,130,246,0.1)", color: "var(--accent)", padding: "1px 5px", borderRadius: 6 }}>
-                      Host
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div style={{
-                padding: "8px 12px", borderRadius: isMe ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                background: isMe ? "var(--accent)" : "var(--bg-card)",
-                border: isMe ? "none" : "1px solid var(--border)",
-                color: isMe ? "white" : "var(--text-primary)", fontSize: 14
-              }}>
-                {msg.text}
-                {onlyMe && (
-                  <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 6 }}>(only you)</span>
-                )}
-              </div>
-
-              <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2, marginLeft: 4, marginRight: 4 }}>
-                {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </span>
+        {/* iMessage-Style Messages Stream */}
+        <div className="p-3 sm:p-4 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/10 h-72 overflow-y-auto space-y-2.5">
+          {messages.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-xs text-slate-400">
+              No messages yet in this match. Coordinate tactics and pitch arrival!
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
+          ) : (
+            messages.map((msg) => {
+              const isMe = msg.sender?._id === userId || msg.sender === userId;
+              const isHostMsg = msg.isHostMessage;
 
-      {/* Input */}
-      <form onSubmit={sendMessage} style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type a message..."
-          maxLength={500}
-          style={{
-            flex: 1, padding: "10px 16px", borderRadius: 12,
-            border: "1px solid var(--border)", background: "var(--bg-primary)",
-            color: "var(--text-primary)", fontSize: 14, outline: "none"
-          }}
-        />
-        <button
-          type="submit"
-          disabled={!text.trim() || !connected}
-          style={{
-            background: "var(--accent)", color: "white", border: "none",
-            borderRadius: 12, padding: "10px 18px", fontSize: 14,
-            fontWeight: 600, cursor: !text.trim() || !connected ? "not-allowed" : "pointer",
-            opacity: !text.trim() || !connected ? 0.5 : 1
-          }}
-        >
-          Send
-        </button>
-      </form>
+              return (
+                <div
+                  key={msg._id}
+                  className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
+                >
+                  {!isMe && (
+                    <div className="flex items-center gap-1.5 mb-1 px-1 text-[11px] text-slate-400">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                        {msg.sender?.name || "Player"}
+                      </span>
+                      {isHostMsg && (
+                        <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                          Host
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <div
+                    className={`px-3.5 py-2 text-xs sm:text-sm leading-relaxed max-w-[80%] shadow-sm ${
+                      isMe
+                        ? "bg-[#007aff] text-white rounded-[16px] rounded-br-[4px]"
+                        : "bg-[#e9e9eb] dark:bg-[#26252a] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-[16px] rounded-bl-[4px]"
+                    }`}
+                  >
+                    <p>{msg.text}</p>
+                  </div>
+
+                  <span className="text-[10px] text-slate-400 mt-1 px-1">
+                    {new Date(msg.createdAt).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              );
+            })
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input */}
+        <form onSubmit={sendMessage} className="flex items-center gap-2">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Type squad message..."
+            maxLength={500}
+            className="flex-1 px-4 py-2.5 rounded-full bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          />
+          <button
+            type="submit"
+            disabled={!text.trim() || !connected}
+            className="w-9 h-9 rounded-full bg-[#007aff] hover:bg-blue-500 text-white flex items-center justify-center transition-all disabled:opacity-30 shadow-md shadow-blue-500/25 shrink-0"
+          >
+            <ArrowUp className="w-4 h-4" />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
-
-export default MatchChat;

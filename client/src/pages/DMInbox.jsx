@@ -1,127 +1,188 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
+import { MessageSquare, Search, ChevronRight, UserPlus, Users } from "lucide-react";
 import API from "../services/api";
 
 function timeAgo(date) {
   if (!date) return "";
   const diff = Math.floor((Date.now() - new Date(date)) / 1000);
-  if (diff < 60) return "just now";
+  if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-function DMInbox() {
+export default function DMInbox() {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    API.get("/dm/conversations")
-      .then((res) => setConversations(res.data.conversations || []))
+    Promise.all([API.get("/dm/conversations"), API.get("/friends")])
+      .then(([convRes, friendsRes]) => {
+        setConversations(convRes.data?.conversations || []);
+        setFriends(friendsRes.data?.friends || []);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: "100vh", background: "var(--bg-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "var(--text-muted)" }}>Loading messages...</p>
-      </div>
-    );
-  }
+  const filteredConversations = conversations.filter((c) =>
+    c.friend?.name?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-primary)", padding: "32px 24px", display: "flex", justifyContent: "center" }}>
-      <div style={{ width: "100%", maxWidth: 560 }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontFamily: "Outfit, sans-serif", fontWeight: 700, fontSize: 28, color: "var(--text-primary)" }}>
-            Messages
-          </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-            Direct messages with your friends
-          </p>
-        </div>
-
-        {/* Conversation list */}
-        <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 20, overflow: "hidden", boxShadow: "var(--card-shadow)" }}>
-          {conversations.length === 0 ? (
-            <div style={{ padding: 48, textAlign: "center" }}>
-              <p style={{ fontSize: 44, marginBottom: 12 }}>💬</p>
-              <p style={{ color: "var(--text-muted)", fontSize: 15 }}>No messages yet</p>
-              <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-                Friends list se kisi ko message karo
+    <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] px-4 sm:px-6 lg:px-10 2xl:px-16 3xl:px-24 py-8 sm:py-12 transition-colors">
+      <div className="max-w-2xl 2xl:max-w-3xl 3xl:max-w-4xl mx-auto space-y-6">
+        
+        {/* Apple Header */}
+        <div className="apple-double-bezel shadow-lg">
+          <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>Encrypted iMessage Kit</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Messages
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                Direct peer-to-peer messaging, match polls, and real-time coordination.
               </p>
             </div>
-          ) : (
-            conversations.map((conv, i) => (
-              <div
-                key={conv._id}
-                onClick={() => navigate(`/dm/${conv.friend?._id}`)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "16px 20px", cursor: "pointer",
-                  borderBottom: i < conversations.length - 1 ? "1px solid var(--border)" : "none",
-                  transition: "background 0.15s",
-                  background: conv.unread > 0 ? "rgba(59,130,246,0.03)" : "transparent"
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = "var(--bg-primary)"}
-                onMouseLeave={(e) => e.currentTarget.style.background = conv.unread > 0 ? "rgba(59,130,246,0.03)" : "transparent"}
-              >
-                {/* Avatar with unread badge */}
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <div style={{
-                    width: 46, height: 46, borderRadius: "50%",
-                    background: "linear-gradient(135deg, var(--accent), #8b5cf6)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "white", fontWeight: 700, fontSize: 18
-                  }}>
-                    {conv.friend?.name?.charAt(0).toUpperCase() || "?"}
-                  </div>
-                  {conv.unread > 0 && (
-                    <span style={{
-                      position: "absolute", top: -2, right: -2,
-                      background: "#ef4444", color: "white",
-                      fontSize: 10, fontWeight: 700,
-                      width: 18, height: 18, borderRadius: "50%",
-                      display: "flex", alignItems: "center", justifyContent: "center"
-                    }}>
-                      {conv.unread > 9 ? "9+" : conv.unread}
-                    </span>
-                  )}
-                </div>
 
-                {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
-                    <span style={{
-                      fontWeight: conv.unread > 0 ? 700 : 600,
-                      color: "var(--text-primary)", fontSize: 15
-                    }}>
-                      {conv.friend?.name}
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0, marginLeft: 8 }}>
-                      {timeAgo(conv.lastMessageTime)}
-                    </span>
+            <Link
+              to="/friends"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-md shadow-blue-500/20 transition-all self-start sm:self-center"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>New Message</span>
+            </Link>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search athlete conversations..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white dark:bg-white/5 border border-black/5 dark:border-white/10 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 shadow-sm"
+          />
+        </div>
+
+        {/* Active Friends Quick Strip */}
+        {friends.length > 0 && (
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 px-1">
+              Active Athletes
+            </h2>
+            <div className="flex items-center gap-3 overflow-x-auto pb-2 pr-2">
+              {friends.map((friend) => (
+                <button
+                  key={friend._id}
+                  type="button"
+                  onClick={() => navigate(`/dm/${friend._id}`)}
+                  className="flex flex-col items-center gap-1 shrink-0 p-2 rounded-2xl hover:bg-black/5 dark:hover:bg-white/5 transition-all group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md group-hover:scale-105 transition-transform">
+                    {friend.name?.charAt(0).toUpperCase() || "?"}
                   </div>
-                  <p style={{
-                    fontSize: 13,
-                    color: conv.unread > 0 ? "var(--text-secondary)" : "var(--text-muted)",
-                    fontWeight: conv.unread > 0 ? 500 : 400,
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
-                  }}>
-                    {conv.lastMessage || "Conversation shuru karo..."}
-                  </p>
-                </div>
+                  <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 max-w-[64px] truncate">
+                    {friend.name?.split(" ")[0]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Conversation List Card */}
+        <div className="apple-double-bezel shadow-xl">
+          <div className="apple-glass-card rounded-[calc(1.75rem-3px)] overflow-hidden divide-y divide-black/5 dark:divide-white/10">
+            {loading ? (
+              <div className="p-12 text-center text-xs text-slate-400">
+                Loading conversations...
               </div>
-            ))
-          )}
+            ) : filteredConversations.length === 0 ? (
+              <div className="p-12 text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 mx-auto text-2xl">
+                  💬
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  No Conversations Yet
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  Connect with fellow players on the Friends list or join a match to start coordinating!
+                </p>
+                <Link
+                  to="/friends"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-blue-600 text-white text-xs font-semibold shadow-md shadow-blue-500/20 hover:bg-blue-500 transition-all mt-2"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Find Athletes</span>
+                </Link>
+              </div>
+            ) : (
+              filteredConversations.map((conv) => (
+                <div
+                  key={conv._id}
+                  onClick={() => navigate(`/dm/${conv.friend?._id}`)}
+                  className={`flex items-center gap-3.5 p-4 sm:p-5 cursor-pointer hover:bg-black/[0.02] dark:hover:bg-white/[0.04] transition-colors ${
+                    conv.unread > 0 ? "bg-blue-500/[0.03]" : ""
+                  }`}
+                >
+                  {/* Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 flex items-center justify-center text-white font-bold text-base shadow-sm">
+                      {conv.friend?.name?.charAt(0).toUpperCase() || "?"}
+                    </div>
+                    {conv.unread > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-extrabold flex items-center justify-center shadow-md">
+                        {conv.unread > 9 ? "9+" : conv.unread}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2 mb-1">
+                      <h4
+                        className={`text-sm 2xl:text-base truncate ${
+                          conv.unread > 0
+                            ? "font-bold text-slate-900 dark:text-white"
+                            : "font-semibold text-slate-800 dark:text-slate-200"
+                        }`}
+                      >
+                        {conv.friend?.name || "Athlete"}
+                      </h4>
+                      <span className="text-[11px] text-slate-400 shrink-0">
+                        {timeAgo(conv.lastMessageTime)}
+                      </span>
+                    </div>
+
+                    <p
+                      className={`text-xs 2xl:text-sm truncate ${
+                        conv.unread > 0
+                          ? "text-blue-600 dark:text-blue-400 font-semibold"
+                          : "text-slate-500 dark:text-slate-400"
+                      }`}
+                    >
+                      {conv.lastMessage || "Tap to chat..."}
+                    </p>
+                  </div>
+
+                  <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-
-export default DMInbox;

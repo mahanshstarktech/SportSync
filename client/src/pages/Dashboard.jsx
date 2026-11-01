@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
 import { useNavigate, Link } from "react-router-dom";
-import Sports3DScene from "../components/Sports3DScene";
-import { Plus, MapPin, Sparkles, Navigation } from "lucide-react";
+import { Plus, MapPin, Sparkles, Navigation, Trophy, Users, Flame } from "lucide-react";
 
 const sportEmoji = {
   cricket: "🏏",
@@ -771,10 +770,43 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* 3D Ball Canvas on the Right - ONLY FOR BIGGER SCREENS (lg+) */}
+            {/* Apple Activity Pill Card on the Right */}
             <div className="hidden lg:flex lg:col-span-4 justify-center items-center">
-              <div className="w-full max-w-[260px] rounded-2xl bg-white/40 dark:bg-white/5 border border-black/5 dark:border-white/10 p-2">
-                <Sports3DScene height="180px" activeSport={selectedSport === "All" ? "football" : selectedSport.toLowerCase()} />
+              <div className="w-full max-w-[280px] p-5 rounded-2xl bg-white/40 dark:bg-white/5 border border-black/5 dark:border-white/10 backdrop-blur-xl shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Community Pulse
+                  </span>
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.04]">
+                    <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                      <Trophy className="w-3.5 h-3.5" />
+                      <span className="text-xs font-bold">{matches.length}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Live Matches</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.04]">
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <Users className="w-3.5 h-3.5" />
+                      <span className="text-xs font-bold">{friends.length}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Friends</p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-black/5 dark:border-white/10 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Active Sport</span>
+                  </span>
+                  <span className="font-semibold text-slate-900 dark:text-white capitalize">
+                    {selectedSport}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

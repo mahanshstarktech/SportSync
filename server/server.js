@@ -4,6 +4,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const cron = require("node-cron");
 const rateLimit = require("express-rate-limit");
+const helmet = require("helmet");
 const connectDB = require("./config/db");
 const errorHandler = require("./middleware/errorMiddleware");
 const initSocket = require("./socket/socketHandler");
@@ -74,8 +75,16 @@ app.use(
   })
 );
 
+// ✅ Security Headers
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: false
+  })
+);
+
 // ✅ Middleware
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 // ✅ Rate limiter for auth routes
 const authLimiter = rateLimit({

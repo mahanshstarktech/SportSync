@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const auth = require("../middleware/authMiddleware");
 const User = require("../models/User");
@@ -7,9 +8,23 @@ const Match = require("../models/Match");
 // GET /api/users/me
 router.get("/me", auth, async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.user)) {
+      return res.status(401).json({ success: false, msg: "Invalid authentication session" });
+    }
+
     const user = await User.findById(req.user).select("-password");
-    if (!user) return res.status(404).json({ success: false, msg: "User not found" });
-    res.json({ success: true, user });
+    if (!user) {
+      return res.status(404).json({ success: false, msg: "Athlete profile not found" });
+    }
+
+    const recentMatches = await Match.find({
+      "players.user": req.user,
+    })
+      .select("title sport location date status winnerTeam players")
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.json({ success: true, user, recentMatches });
   } catch (err) {
     next(err);
   }
@@ -27,7 +42,7 @@ router.get("/search", auth, async (req, res, next) => {
       _id: { $ne: req.user }, // exclude self
       name: { $regex: q.trim(), $options: "i" }
     })
-      .select("name email skillLevel sports wins losses matchesPlayed")
+      .select("name email skillLevel sports wins losses matchesPlayed rating")
       .limit(20);
 
     res.json({ success: true, users });
@@ -39,15 +54,18 @@ router.get("/search", auth, async (req, res, next) => {
 // GET /api/users/:id
 router.get("/:id", auth, async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, msg: "Invalid user ID format" });
+    }
+
     const user = await User.findById(req.params.id).select("-password -walletBalance");
-    if (!user) return res.status(404).json({ success: false, msg: "User not found" });
+    if (!user) return res.status(404).json({ success: false, msg: "Athlete not found" });
 
     const recentMatches = await Match.find({
       "players.user": req.params.id,
-      status: "completed"
     })
-      .select("sport location date winnerTeam players")
-      .sort({ updatedAt: -1 })
+      .select("title sport location date status winnerTeam players")
+      .sort({ createdAt: -1 })
       .limit(5);
 
     res.json({ success: true, user, recentMatches });

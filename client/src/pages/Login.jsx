@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Eye, EyeOff, Lock, Mail, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
-import API, { DEMO_USER } from "../services/api";
-import Sports3DScene from "../components/Sports3DScene";
+import { Eye, EyeOff, Lock, Mail, ArrowRight, ShieldCheck, Zap, Activity } from "lucide-react";
+import API from "../services/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,21 +10,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handleInstantDemoLogin = () => {
-    localStorage.setItem("token", "demo_jwt_token_alex_hunter_2026");
-    localStorage.setItem("userId", DEMO_USER._id);
-    localStorage.setItem("user", JSON.stringify(DEMO_USER));
-    localStorage.setItem("sportsSelected", "true");
-    navigate("/dashboard");
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg("");
 
     const trimmedEmail = form.email.trim();
     if (!trimmedEmail || !form.password) {
-      setErrorMsg("Please enter both email and password.");
+      setErrorMsg("Please provide both your registered email and password.");
       return;
     }
 
@@ -36,144 +27,118 @@ export default function Login() {
         password: form.password,
       });
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("userId", res.data.user._id);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
+      if (res.data?.token && res.data?.user) {
+        localStorage.setItem("token", res.data.token);
+        localStorage.setItem("userId", res.data.user._id);
+        localStorage.setItem("user", JSON.stringify(res.data.user));
 
-      const userSports = res.data.user.sports || [];
-      const alreadySelected =
-        localStorage.getItem("sportsSelected") === "true" || userSports.length > 0;
+        const userSports = res.data.user.sports || [];
+        const hasSports =
+          localStorage.getItem("sportsSelected") === "true" || userSports.length > 0;
 
-      if (!alreadySelected) {
-        navigate("/select-sports");
+        if (!hasSports) {
+          navigate("/select-sports");
+        } else {
+          navigate("/dashboard");
+        }
       } else {
-        navigate("/dashboard");
+        setErrorMsg("Authentication succeeded, but invalid server payload received.");
       }
     } catch (err) {
-      console.error("Login failure:", err);
-      const isNetworkError =
-        err.code === "ECONNABORTED" ||
-        !err.response ||
-        err.message === "Network Error" ||
-        (err.response && err.response.status >= 500);
-
-      // If backend is sleeping/offline OR user used demo credentials, seamlessly enter demo session
-      if (isNetworkError || trimmedEmail.toLowerCase() === "alex.hunter@example.com") {
-        handleInstantDemoLogin();
-        return;
+      console.error("[Login Request Failed]:", err);
+      if (err.code === "ECONNABORTED" || !err.response) {
+        setErrorMsg(
+          "Server connection timed out or unreachable. If hosting on free tier, please allow ~30s for server startup."
+        );
+      } else {
+        const msg =
+          err.response?.data?.msg ||
+          err.response?.data?.message ||
+          "Invalid email or password. Please try again.";
+        setErrorMsg(msg);
       }
-
-      const serverMsg =
-        err.response?.data?.msg ||
-        err.response?.data?.message ||
-        "Login failed. Please verify your credentials or click Instant Demo Access.";
-      setErrorMsg(serverMsg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDemoFill = () => {
-    setForm({
-      email: "alex.hunter@example.com",
-      password: "password123",
-    });
-    setErrorMsg("");
-  };
-
   return (
-    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 lg:p-10 bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] transition-colors duration-300">
+    <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center p-4 sm:p-6 lg:p-10 2xl:p-16 3xl:p-24 bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] transition-colors duration-300">
       {/* Background ambient lighting */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 dark:bg-blue-600/15 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-sky-400/10 dark:bg-indigo-600/15 rounded-full blur-3xl transform translate-x-1/2 translate-y-1/2" />
+        <div className="absolute top-1/4 left-1/4 w-96 2xl:w-[600px] h-96 2xl:h-[600px] bg-blue-500/10 dark:bg-blue-600/15 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 2xl:w-[600px] h-96 2xl:h-[600px] bg-sky-400/10 dark:bg-indigo-600/15 rounded-full blur-3xl transform translate-x-1/2 translate-y-1/2" />
       </div>
 
-      <div className="relative z-10 w-full max-w-6xl 2xl:max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        {/* Left Column: 3D Interactive Sport Presentation - HIDDEN ON MOBILE (< 1024px), VISIBLE ON BIGGER SCREENS (lg+) */}
-        <div className="hidden lg:flex lg:col-span-6 xl:col-span-7 flex-col items-center lg:items-start text-center lg:text-left px-2 sm:px-4">
-          {/* Apple Eyebrow Tag */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800/60 mb-4 backdrop-blur-md">
+      <div className="relative z-10 w-full max-w-md sm:max-w-lg lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        {/* Left Column: Apple Brand Showcase (Desktop/Large Screens) */}
+        <div className="hidden lg:flex lg:col-span-6 xl:col-span-7 flex-col items-start text-left px-4 2xl:px-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800/60 mb-5 backdrop-blur-md">
             <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse" />
-            <span className="text-[11px] font-semibold tracking-wider uppercase text-blue-600 dark:text-blue-400">
+            <span className="text-[11px] 2xl:text-xs font-semibold tracking-wider uppercase text-blue-600 dark:text-blue-400">
               Next-Gen Sports Hub
             </span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl md:text-5xl 2xl:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.15]">
+          <h1 className="text-4xl xl:text-5xl 2xl:text-6xl 3xl:text-7xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.12]">
             Match. Play. <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-500 dark:from-blue-400 dark:to-cyan-300">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-500 to-cyan-500 dark:from-blue-400 dark:via-indigo-300 dark:to-cyan-300">
               Elevate Your Game.
             </span>
           </h1>
 
-          <p className="mt-3 sm:mt-4 text-sm sm:text-base 2xl:text-lg text-slate-600 dark:text-slate-400 max-w-lg">
-            Connect with local players, discover sports pitches, organize tournaments, and record stats with effortless precision.
+          <p className="mt-4 text-base 2xl:text-lg 3xl:text-xl text-slate-600 dark:text-slate-400 max-w-lg 2xl:max-w-xl leading-relaxed">
+            The modern sports matchmaking platform designed for athletes. Discover nearby turf pitches, create tournaments, coordinate live games, and track performance.
           </p>
 
-          {/* Interactive 3D Sphere */}
-          <div className="w-full max-w-md sm:max-w-lg lg:max-w-md my-4 sm:my-6 rounded-3xl bg-white/40 dark:bg-white/5 backdrop-blur-xl border border-black/5 dark:border-white/10 shadow-sm p-3">
-            <Sports3DScene height="260px" activeSport="football" />
-            <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 mt-1">
-              Drag or touch the 3D ball to rotate • Tap sports below to change
-            </p>
-          </div>
+          {/* Feature Highlights Grid */}
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-lg 2xl:max-w-xl">
+            <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/10 backdrop-blur-md">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+                <Zap className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xs 2xl:text-sm font-semibold text-slate-900 dark:text-white">Real-Time Sync</h2>
+                <p className="text-[11px] 2xl:text-xs text-slate-500 dark:text-slate-400 mt-0.5">Instant match updates and peer-to-peer player invites.</p>
+              </div>
+            </div>
 
-          {/* Highlights */}
-          <div className="hidden sm:flex flex-wrap gap-4 text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Real-time Chat & Matchmaking</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Verified Match Ratings</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Cloudflare & Render Hosted</span>
+            <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-white/50 dark:bg-white/5 border border-black/5 dark:border-white/10 backdrop-blur-md">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xs 2xl:text-sm font-semibold text-slate-900 dark:text-white">Dynamic Ratings</h2>
+                <p className="text-[11px] 2xl:text-xs text-slate-500 dark:text-slate-400 mt-0.5">Fair play rating algorithm and skill level tracking.</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Apple-Style Auth Card - FOCUSED AND RESPONSIVE ON ALL SCREENS */}
-        <div className="lg:col-span-6 xl:col-span-5 w-full max-w-md mx-auto">
-          {/* Double-Bezel Enclosure */}
+        {/* Right Column: Apple-Style Auth Card */}
+        <div className="lg:col-span-6 xl:col-span-5 w-full">
           <div className="apple-double-bezel shadow-2xl">
-            <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8">
+            <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 2xl:p-10">
               {/* Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-                    <span className="text-xl">⚡</span>
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-                      SportSync
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Sign in to your athlete profile
-                    </p>
-                  </div>
+              <div className="flex items-center gap-3 pb-5 border-b border-black/5 dark:border-white/10">
+                <div className="w-11 h-11 2xl:w-12 2xl:h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/25 shrink-0">
+                  <span className="text-2xl">⚡</span>
                 </div>
-
-                {/* Demo Button */}
-                <button
-                  type="button"
-                  onClick={handleDemoFill}
-                  title="Auto-fill demo test credentials"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Demo Fill</span>
-                </button>
+                <div>
+                  <h2 className="text-xl 2xl:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                    SportSync
+                  </h2>
+                  <p className="text-xs 2xl:text-sm text-slate-500 dark:text-slate-400">
+                    Sign in to your athlete profile
+                  </p>
+                </div>
               </div>
 
               {/* Error Banner */}
               {errorMsg && (
-                <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-medium flex items-start gap-2 animate-slide-up">
-                  <span className="text-sm">⚠️</span>
-                  <span className="flex-1">{errorMsg}</span>
+                <div className="mt-4 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs 2xl:text-sm font-medium flex items-start gap-2.5 animate-slide-up">
+                  <span className="text-base leading-none">⚠️</span>
+                  <span className="flex-1 leading-snug">{errorMsg}</span>
                 </div>
               )}
 
@@ -183,7 +148,7 @@ export default function Login() {
                 <div>
                   <label
                     htmlFor="login-email"
-                    className="block text-xs font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400 mb-1.5"
+                    className="block text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400 mb-1.5"
                   >
                     Email Address
                   </label>
@@ -193,11 +158,11 @@ export default function Login() {
                       id="login-email"
                       type="email"
                       autoComplete="email"
-                      placeholder="alex.hunter@example.com"
+                      placeholder="athlete@example.com"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
                       required
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
+                      className="w-full pl-10 pr-4 py-3 2xl:py-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm 2xl:text-base text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
                     />
                   </div>
                 </div>
@@ -207,7 +172,7 @@ export default function Login() {
                   <div className="flex items-center justify-between mb-1.5">
                     <label
                       htmlFor="login-password"
-                      className="block text-xs font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400"
+                      className="block text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400"
                     >
                       Password
                     </label>
@@ -222,13 +187,14 @@ export default function Login() {
                       value={form.password}
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
                       required
-                      className="w-full pl-10 pr-10 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
+                      className="w-full pl-10 pr-10 py-3 2xl:py-3.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm 2xl:text-base text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
                       tabIndex={-1}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -239,7 +205,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full min-h-[46px] mt-2 py-3 px-4 rounded-xl font-semibold text-sm text-white bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all shadow-md shadow-blue-600/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full min-h-[48px] mt-3 py-3.5 px-4 rounded-xl font-semibold text-sm 2xl:text-base text-white bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all shadow-md shadow-blue-600/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -252,28 +218,16 @@ export default function Login() {
                 </button>
               </form>
 
-              {/* Divider & One-Click Demo Access */}
-              <div className="relative flex py-3 items-center">
-                <div className="flex-grow border-t border-black/10 dark:border-white/10" />
-                <span className="flex-shrink mx-3 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
-                  or explore instantly
-                </span>
-                <div className="flex-grow border-t border-black/10 dark:border-white/10" />
+              {/* Security Badge */}
+              <div className="mt-5 flex items-center justify-center gap-1.5 text-[11px] 2xl:text-xs text-slate-400">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Encrypted with SHA-256 & JWT Authentication</span>
               </div>
-
-              <button
-                type="button"
-                onClick={handleInstantDemoLogin}
-                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200/60 dark:border-blue-800/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                <Sparkles className="w-4 h-4 text-blue-500" />
-                <span>⚡ Instant Demo Access (One-Click)</span>
-              </button>
 
               {/* Bottom Switcher */}
               <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/10 text-center">
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-                  New to SportSync?{" "}
+                <p className="text-xs sm:text-sm 2xl:text-base text-slate-500 dark:text-slate-400">
+                  New athlete?{" "}
                   <Link
                     to="/register"
                     className="font-semibold text-blue-600 dark:text-blue-400 hover:underline"

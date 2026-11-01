@@ -129,11 +129,11 @@ module.exports = function initSocket(server) {
       io.to(matchId).emit("chatVisibilityChanged", { chatOpenForAll });
     });
 
-    socket.on("dm:send", async ({ receiverId, text }) => {
+    socket.on("dm:send", async ({ receiverId, text, replyTo, poll, bubbleEffect }) => {
       try {
-        if (!text || !text.trim()) return;
-        if (text.length > 1000)
-          return socket.emit("dm:error", { message: "Message too long" });
+        if ((!text || !text.trim()) && !poll) return;
+        if (text && text.length > 2000)
+          return socket.emit("dm:error", { message: "Message exceeds character limit." });
 
         const Conversation = require("../models/Conversation");
         const DirectMessage = require("../models/DirectMessage");
@@ -149,17 +149,34 @@ module.exports = function initSocket(server) {
           });
         }
 
-        const message = await DirectMessage.create({
+        const messageData = {
           conversationId: conversation._id,
           sender: socket.userId,
           receiver: receiverId,
-          text: text.trim(),
-        });
+          text: (text || (poll ? `📊 Poll: ${poll.question}` : "")).trim(),
+          bubbleEffect: bubbleEffect || "none",
+        };
 
+        if (replyTo && replyTo.messageId) {
+          messageData.replyTo = {
+            messageId: replyTo.messageId,
+            text: replyTo.text,
+            senderName: replyTo.senderName,
+          };
+        }
+
+        if (poll && poll.question && Array.isArray(poll.options)) {
+          messageData.poll = {
+            question: poll.question,
+            options: poll.options.map((opt) => ({ text: opt, votes: [] })),
+          };
+        }
+
+        const message = await DirectMessage.create(messageData);
         const populated = await message.populate("sender", "name");
 
         const prevUnread = conversation.unreadCount.get(receiverId) || 0;
-        conversation.lastMessage = text.trim();
+        conversation.lastMessage = messageData.text;
         conversation.lastMessageTime = new Date();
         conversation.unreadCount.set(receiverId, prevUnread + 1);
         await conversation.save();
@@ -176,7 +193,67 @@ module.exports = function initSocket(server) {
 
       } catch (err) {
         console.error("[DM Error]", err.message);
-        socket.emit("dm:error", { message: "Message send failed" });
+        socket.emit("dm:error", { message: "Message delivery failed" });
+      }
+    });
+
+    // Apple iMessage Tapback Reactions (❤️ 👍 👎 😂 ‼️ ❓)
+    socket.on("dm:reaction", async ({ messageId, receiverId, reactionType }) => {
+      try {
+        const DirectMessage = require("../models/DirectMessage");
+        const msg = await DirectMessage.findById(messageId);
+        if (!msg) return;
+
+        const existingIndex = msg.reactions.findIndex(
+          (r) => r.userId === socket.userId && r.type === reactionType
+        );
+
+        if (existingIndex > -1) {
+          msg.reactions.splice(existingIndex, 1);
+        } else {
+          msg.reactions = msg.reactions.filter((r) => r.userId !== socket.userId);
+          msg.reactions.push({ userId: socket.userId, type: reactionType });
+        }
+
+        await msg.save();
+
+        io.to(receiverId).emit("dm:reaction:update", {
+          messageId,
+          reactions: msg.reactions,
+        });
+        socket.emit("dm:reaction:update", {
+          messageId,
+          reactions: msg.reactions,
+        });
+      } catch (err) {
+        console.error("[DM Reaction Error]:", err.message);
+      }
+    });
+
+    // Interactive Poll Voting
+    socket.on("dm:poll:vote", async ({ messageId, receiverId, optionIndex }) => {
+      try {
+        const DirectMessage = require("../models/DirectMessage");
+        const msg = await DirectMessage.findById(messageId);
+        if (!msg || !msg.poll || !msg.poll.options[optionIndex]) return;
+
+        msg.poll.options.forEach((opt) => {
+          opt.votes = opt.votes.filter((u) => u !== socket.userId);
+        });
+
+        msg.poll.options[optionIndex].votes.push(socket.userId);
+        await msg.save();
+
+        io.to(receiverId).emit("dm:poll:update", {
+          messageId,
+          poll: msg.poll,
+        });
+        socket.emit("dm:poll:update", {
+          messageId,
+          poll: msg.poll,
+        });
+      } catch (err) {
+        console.error("[DM Poll Vote Error]:", err.message);
       }
     });
 
