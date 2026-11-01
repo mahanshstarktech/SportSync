@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { MessageSquare, Search, ChevronRight, UserPlus, Users } from "lucide-react";
+import { Search, ChevronRight, UserPlus, Users } from "lucide-react";
 import API from "../services/api";
 
 function timeAgo(date) {
@@ -41,10 +41,6 @@ export default function DMInbox() {
         <div className="apple-double-bezel shadow-lg">
           <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider mb-2">
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Encrypted iMessage Kit</span>
-              </div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
                 Messages
               </h1>

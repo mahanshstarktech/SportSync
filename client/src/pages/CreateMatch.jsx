@@ -1,59 +1,144 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Calendar,
+  Clock,
+  Users,
+  ArrowRight,
+  UserCheck,
+} from "lucide-react";
 import API from "../services/api";
 import LocationSearchInput from "../components/LocationSearchInput";
 
 const SPORTS = [
-  { name: "Cricket", emoji: "🏏" },
-  { name: "Football", emoji: "⚽" },
-  { name: "Basketball", emoji: "🏀" },
-  { name: "Tennis", emoji: "🎾" },
-  { name: "Badminton", emoji: "🏸" },
-  { name: "Volleyball", emoji: "🏐" },
-  { name: "Kabaddi", emoji: "🤼" },
-  { name: "Hockey", emoji: "🏑" },
-  { name: "Table Tennis", emoji: "🏓" },
-  { name: "Swimming", emoji: "🏊" },
-  { name: "Athletics", emoji: "🏃" },
-  { name: "Boxing", emoji: "🥊" },
+  { name: "Cricket", emoji: "🏏", defaultPlayers: 11 },
+  { name: "Football", emoji: "⚽", defaultPlayers: 10 },
+  { name: "Basketball", emoji: "🏀", defaultPlayers: 10 },
+  { name: "Tennis", emoji: "🎾", defaultPlayers: 2 },
+  { name: "Badminton", emoji: "🏸", defaultPlayers: 4 },
+  { name: "Volleyball", emoji: "🏐", defaultPlayers: 12 },
+  { name: "Kabaddi", emoji: "🤼", defaultPlayers: 14 },
+  { name: "Hockey", emoji: "🏑", defaultPlayers: 11 },
+  { name: "Table Tennis", emoji: "🏓", defaultPlayers: 2 },
+  { name: "Swimming", emoji: "🏊", defaultPlayers: 6 },
+  { name: "Athletics", emoji: "🏃", defaultPlayers: 8 },
+  { name: "Boxing", emoji: "🥊", defaultPlayers: 2 },
 ];
 
-function CreateMatch() {
+export default function CreateMatch() {
   const navigate = useNavigate();
-  const [selectedSport, setSelectedSport] = useState("");
-  const [form, setForm] = useState({ date: "", maxPlayers: "" });
-  const [location, setLocation] = useState({ name: "", lat: "", lng: "" });
-  const [loading, setLoading] = useState(false);
 
-  // ✅ Play Together
+  // Form State
+  const [selectedSport, setSelectedSport] = useState("Football");
+  const [matchDate, setMatchDate] = useState(() => {
+    // Tomorrow default
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split("T")[0];
+  });
+  const [matchTime, setMatchTime] = useState("18:30");
+  const [maxPlayers, setMaxPlayers] = useState(10);
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState({ name: "", lat: 18.9385, lng: 72.8257 });
+
+  // Friends & Invites
   const [friends, setFriends] = useState([]);
   const [selectedFriends, setSelectedFriends] = useState([]);
 
+  // UI Status
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Today string for min date
+  const todayStr = new Date().toISOString().split("T")[0];
+
   useEffect(() => {
     API.get("/friends")
-      .then((res) => setFriends(res.data.friends || []))
+      .then((res) => setFriends(res.data?.friends || []))
       .catch(() => {});
   }, []);
 
+  // Update default players when sport changes
+  const handleSportChange = (sport) => {
+    setSelectedSport(sport.name);
+    setMaxPlayers(sport.defaultPlayers);
+    if (!title || SPORTS.some((s) => title.includes(s.name))) {
+      setTitle(`${sport.name} Community Match`);
+    }
+  };
+
   const toggleFriend = (id) => {
     setSelectedFriends((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id],
+      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
     );
   };
 
   const handleLocationSelect = ({ name, lat, lng }) => {
-    setLocation({ name, lat, lng });
+    setLocation({ name, lat: Number(lat), lng: Number(lng) });
+    setErrorMsg("");
   };
 
-  const createMatch = async (e) => {
+  // Quick Date presets
+  const setQuickDate = (type) => {
+    const d = new Date();
+    if (type === "today") {
+      setMatchDate(d.toISOString().split("T")[0]);
+    } else if (type === "tomorrow") {
+      d.setDate(d.getDate() + 1);
+      setMatchDate(d.toISOString().split("T")[0]);
+    } else if (type === "weekend") {
+      // Find upcoming Saturday
+      const day = d.getDay();
+      const diff = d.getDate() + (6 - day + (day === 6 ? 7 : 0));
+      d.setDate(diff);
+      setMatchDate(d.toISOString().split("T")[0]);
+    }
+  };
+
+  // Quick Time presets
+  const quickTimes = ["07:00", "09:00", "17:00", "18:30", "20:00"];
+
+  const handleCreateMatch = async (e) => {
     e.preventDefault();
-    if (!selectedSport) return alert("Please select a sport ❌");
-    if (!location.name || !location.lat || !location.lng)
-      return alert("Please select a location from suggestions ❌");
+    setErrorMsg("");
+
+    if (!selectedSport) {
+      setErrorMsg("Please select a sport.");
+      return;
+    }
+
+    if (!location.name || isNaN(location.lat) || isNaN(location.lng)) {
+      setErrorMsg("Please select a valid venue location using search or GPS.");
+      return;
+    }
+
+    if (!matchDate || !matchTime) {
+      setErrorMsg("Please choose both date and time for the match.");
+      return;
+    }
+
+    // Combine date & time into ISO string
+    const matchDateTime = new Date(`${matchDate}T${matchTime}`);
+    if (isNaN(matchDateTime.getTime())) {
+      setErrorMsg("Invalid date/time format.");
+      return;
+    }
+
+    if (matchDateTime <= new Date()) {
+      setErrorMsg("Match date & time must be in the future.");
+      return;
+    }
+
+    if (maxPlayers < 2) {
+      setErrorMsg("Max players must be at least 2.");
+      return;
+    }
 
     try {
       setLoading(true);
-      const res = await API.post("/matches", {
+
+      const payload = {
+        title: title.trim() || `${selectedSport} Community Match`,
         sport: selectedSport,
         location: {
           name: location.name,
@@ -62,469 +147,303 @@ function CreateMatch() {
             coordinates: [parseFloat(location.lng), parseFloat(location.lat)],
           },
         },
-        date: new Date(form.date).toISOString(),
-        maxPlayers: Number(form.maxPlayers),
-      });
+        date: matchDateTime.toISOString(),
+        maxPlayers: Number(maxPlayers),
+      };
 
-      // ✅ Friends selected hain toh invite bhejo
-      if (selectedFriends.length > 0 && res.data.match?._id) {
-        await API.post(`/matches/${res.data.match._id}/invite`, {
-          friendIds: selectedFriends,
-        });
+      const res = await API.post("/matches", payload);
+
+      // Send friend invites if selected
+      if (selectedFriends.length > 0 && res.data?.match?._id) {
+        try {
+          await API.post(`/matches/${res.data.match._id}/invite`, {
+            friendIds: selectedFriends,
+          });
+        } catch {
+          // Invite errors non-blocking
+        }
       }
 
-      navigate("/dashboard");
+      navigate(`/match/${res.data.match._id}`);
     } catch (err) {
-      alert(err.response?.data?.msg || "Create failed ❌");
+      console.error("[Create Match Error]:", err);
+      setErrorMsg(
+        err.response?.data?.msg ||
+        err.response?.data?.message ||
+        "Failed to create match. Please verify your details."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--bg-primary)",
-        padding: "32px 24px",
-        display: "flex",
-        justifyContent: "center",
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 560 }}>
+    <div className="min-h-screen bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] px-4 sm:px-6 lg:px-10 2xl:px-16 3xl:px-24 py-8 sm:py-12 transition-colors">
+      <div className="max-w-3xl 2xl:max-w-4xl 3xl:max-w-5xl mx-auto space-y-6">
         {/* Header */}
-        <div style={{ marginBottom: 28 }}>
-          <h1
-            style={{
-              fontFamily: "Outfit, sans-serif",
-              fontWeight: 700,
-              fontSize: 28,
-              color: "var(--text-primary)",
-            }}
-          >
+        <div>
+          <h1 className="text-3xl sm:text-4xl 2xl:text-5xl font-bold tracking-tight text-slate-900 dark:text-white">
             Create Match
           </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 4 }}>
-            Set up a match and invite players
+          <p className="text-sm 2xl:text-base text-slate-500 dark:text-slate-400 mt-1">
+            Schedule an open pitch session, set the venue, and invite nearby athletes.
           </p>
         </div>
 
-        <form onSubmit={createMatch}>
-          {/* Sport selection */}
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 20,
-              padding: 20,
-              marginBottom: 16,
-              boxShadow: "var(--card-shadow)",
-            }}
-          >
-            <p
-              style={{
-                fontFamily: "Outfit, sans-serif",
-                fontWeight: 600,
-                fontSize: 15,
-                color: "var(--text-primary)",
-                marginBottom: 14,
-              }}
-            >
-              Select Sport
-            </p>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 8,
-              }}
-            >
-              {SPORTS.map((sport) => (
-                <button
-                  type="button"
-                  key={sport.name}
-                  onClick={() => setSelectedSport(sport.name)}
-                  style={{
-                    padding: "12px 8px",
-                    borderRadius: 12,
-                    cursor: "pointer",
-                    border:
-                      selectedSport === sport.name
-                        ? "2px solid var(--accent)"
-                        : "2px solid var(--border)",
-                    background:
-                      selectedSport === sport.name
-                        ? "rgba(59,130,246,0.08)"
-                        : "var(--bg-primary)",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 4,
-                    transition: "all 0.15s",
-                    transform:
-                      selectedSport === sport.name ? "scale(1.04)" : "scale(1)",
-                  }}
-                >
-                  <span style={{ fontSize: 22 }}>{sport.emoji}</span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: selectedSport === sport.name ? 600 : 400,
-                      color:
-                        selectedSport === sport.name
-                          ? "var(--accent)"
-                          : "var(--text-secondary)",
-                    }}
-                  >
-                    {sport.name}
-                  </span>
-                </button>
-              ))}
-            </div>
+        {/* Error Notice */}
+        {errorMsg && (
+          <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm font-medium flex items-center gap-3 animate-slide-up">
+            <span className="text-lg">⚠️</span>
+            <span className="flex-1">{errorMsg}</span>
           </div>
+        )}
 
-          {/* Location */}
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 20,
-              padding: 20,
-              marginBottom: 16,
-              boxShadow: "var(--card-shadow)",
-            }}
-          >
-            <p
-              style={{
-                fontFamily: "Outfit, sans-serif",
-                fontWeight: 600,
-                fontSize: 15,
-                color: "var(--text-primary)",
-                marginBottom: 12,
-              }}
-            >
-              Locationn
-            </p>
-            <LocationSearchInput onSelect={handleLocationSelect} />
-            {location.name && (
-              <div
-                style={{
-                  marginTop: 10,
-                  padding: "10px 14px",
-                  borderRadius: 10,
-                  background: "var(--bg-card)",
-                  border: "1px solid var(--border)",
-                  boxShadow: "var(--card-shadow)",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: 13,
-                    color: "var(--text-primary)",
-                    fontWeight: 500,
-                  }}
-                >
-                  📍 {location.name}
-                </p>
-
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: "var(--text-muted)",
-                    marginTop: 2,
-                  }}
-                >
-                  {parseFloat(location.lat).toFixed(5)},{" "}
-                  {parseFloat(location.lng).toFixed(5)}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Date & Players */}
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 20,
-              padding: 20,
-              marginBottom: 16,
-              boxShadow: "var(--card-shadow)",
-            }}
-          >
-            <p
-              style={{
-                fontFamily: "Outfit, sans-serif",
-                fontWeight: 600,
-                fontSize: 15,
-                color: "var(--text-primary)",
-                marginBottom: 14,
-              }}
-            >
-              Match Details
-            </p>
-
-            <div style={{ marginBottom: 14 }}>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "var(--text-secondary)",
-                  marginBottom: 6,
-                }}
-              >
-                Date & Time
-              </label>
-              <input
-                type="datetime-local"
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  background: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  fontSize: 14,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: "var(--text-secondary)",
-                  marginBottom: 6,
-                }}
-              >
-                Max Players
-              </label>
-              <input
-                type="number"
-                min="2"
-                max="50"
-                placeholder="e.g. 10"
-                required
-                style={{
-                  width: "100%",
-                  padding: "11px 14px",
-                  borderRadius: 12,
-                  border: "1px solid var(--border)",
-                  background: "var(--bg-primary)",
-                  color: "var(--text-primary)",
-                  fontSize: 14,
-                  outline: "none",
-                  boxSizing: "border-box",
-                }}
-                onChange={(e) =>
-                  setForm({ ...form, maxPlayers: e.target.value })
-                }
-              />
-            </div>
-          </div>
-
-          {/* ✅ Play Together — Invite Friends */}
-          {friends.length > 0 && (
-            <div
-              style={{
-                background: "var(--bg-card)",
-                border: "1px solid var(--border)",
-                borderRadius: 20,
-                padding: 20,
-                marginBottom: 24,
-                boxShadow: "var(--card-shadow)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 14,
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: "Outfit, sans-serif",
-                    fontWeight: 600,
-                    fontSize: 15,
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  👥 Invite Friends
-                </p>
-                {selectedFriends.length > 0 && (
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: "3px 10px",
-                      borderRadius: 20,
-                      background: "rgba(59,130,246,0.1)",
-                      color: "var(--accent)",
-                    }}
-                  >
-                    {selectedFriends.length} selected
-                  </span>
-                )}
+        <form onSubmit={handleCreateMatch} className="space-y-6">
+          {/* Card 1: Sport Selection */}
+          <div className="apple-double-bezel shadow-lg">
+            <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8">
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400">
+                  Select Sport
+                </label>
+                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                  {selectedSport} Selected
+                </span>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {friends.map((friend) => {
-                  const isSelected = selectedFriends.includes(friend._id);
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+                {SPORTS.map((sport) => {
+                  const isSelected = selectedSport === sport.name;
                   return (
-                    <div
-                      key={friend._id}
-                      onClick={() => toggleFriend(friend._id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "10px 14px",
-                        borderRadius: 12,
-                        cursor: "pointer",
-                        border: isSelected
-                          ? "1.5px solid var(--accent)"
-                          : "1.5px solid var(--border)",
-                        background: isSelected
-                          ? "rgba(59,130,246,0.05)"
-                          : "var(--bg-primary)",
-                        transition: "all 0.15s",
-                      }}
+                    <button
+                      type="button"
+                      key={sport.name}
+                      onClick={() => handleSportChange(sport)}
+                      className={`p-3 rounded-2xl flex flex-col items-center gap-1.5 transition-all text-center ${
+                        isSelected
+                          ? "bg-blue-600 text-white shadow-md shadow-blue-500/30 scale-[1.03]"
+                          : "bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-300 border border-black/5 dark:border-white/10"
+                      }`}
                     >
-                      <div
-                        style={{
-                          width: 36,
-                          height: 36,
-                          borderRadius: "50%",
-                          background: isSelected
-                            ? "var(--accent)"
-                            : "linear-gradient(135deg, var(--accent), #8b5cf6)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "white",
-                          fontWeight: 700,
-                          fontSize: 15,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {friend.name?.charAt(0).toUpperCase()}
-                      </div>
-
-                      <div style={{ flex: 1 }}>
-                        <p
-                          style={{
-                            fontWeight: 600,
-                            fontSize: 14,
-                            color: isSelected
-                              ? "var(--accent)"
-                              : "var(--text-primary)",
-                          }}
-                        >
-                          {friend.name}
-                        </p>
-                        <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                          {friend.skillLevel} · {friend.wins || 0}W{" "}
-                          {friend.losses || 0}L
-                        </p>
-                      </div>
-
-                      <div
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: "50%",
-                          border: isSelected
-                            ? "none"
-                            : "2px solid var(--border)",
-                          background: isSelected
-                            ? "var(--accent)"
-                            : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {isSelected && (
-                          <span
-                            style={{
-                              color: "white",
-                              fontSize: 12,
-                              fontWeight: 700,
-                            }}
-                          >
-                            ✓
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      <span className="text-2xl 2xl:text-3xl">{sport.emoji}</span>
+                      <span className="text-xs font-semibold truncate w-full">
+                        {sport.name}
+                      </span>
+                    </button>
                   );
                 })}
               </div>
+            </div>
+          </div>
 
-              {selectedFriends.length > 0 && (
-                <p
-                  style={{
-                    fontSize: 12,
-                    color: "var(--text-muted)",
-                    marginTop: 10,
-                    textAlign: "center",
-                  }}
+          {/* Card 2: Match Title & Venue */}
+          <div className="apple-double-bezel shadow-lg">
+            <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 space-y-5">
+              {/* Title */}
+              <div>
+                <label
+                  htmlFor="match-title"
+                  className="block text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400 mb-1.5"
                 >
-                  After the match is created, the invite will be sent
-                  automatically.
+                  Match Title
+                </label>
+                <input
+                  id="match-title"
+                  type="text"
+                  placeholder="e.g. 5v5 Friday Night Turf Clash"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
+                />
+              </div>
+
+              {/* Advanced Location Search */}
+              <div>
+                <label className="block text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400 mb-1.5">
+                  Match Venue & Pitch
+                </label>
+                <LocationSearchInput onSelect={handleLocationSelect} />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Separate Date & Time Columns with Selectors */}
+          <div className="apple-double-bezel shadow-lg">
+            <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 space-y-6">
+              <p className="text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400">
+                Match Schedule & Capacity
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Column 1: Date Selector */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="match-date"
+                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Select Date</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate("today")}
+                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-black/[0.04] dark:bg-white/[0.08] hover:bg-blue-600 hover:text-white transition-colors"
+                      >
+                        Today
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate("tomorrow")}
+                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-black/[0.04] dark:bg-white/[0.08] hover:bg-blue-600 hover:text-white transition-colors"
+                      >
+                        Tomorrow
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQuickDate("weekend")}
+                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-black/[0.04] dark:bg-white/[0.08] hover:bg-blue-600 hover:text-white transition-colors"
+                      >
+                        Weekend
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      id="match-date"
+                      type="date"
+                      min={todayStr}
+                      value={matchDate}
+                      onChange={(e) => setMatchDate(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Column 2: Time Selector */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="match-time"
+                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Select Time</span>
+                    </label>
+                    <div className="flex items-center gap-1 overflow-x-auto">
+                      {quickTimes.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setMatchTime(t)}
+                          className={`px-1.5 py-0.5 rounded-md text-[11px] font-mono font-medium transition-colors ${
+                            matchTime === t
+                              ? "bg-blue-600 text-white"
+                              : "bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] text-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      id="match-time"
+                      type="time"
+                      value={matchTime}
+                      onChange={(e) => setMatchTime(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Max Players Slider/Number */}
+              <div className="pt-2 border-t border-black/5 dark:border-white/10">
+                <div className="flex items-center justify-between mb-2">
+                  <label
+                    htmlFor="match-players"
+                    className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
+                  >
+                    <Users className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Total Athlete Capacity</span>
+                  </label>
+                  <span className="text-sm font-bold text-blue-600 dark:text-blue-400 font-mono">
+                    {maxPlayers} Athletes
+                  </span>
+                </div>
+                <input
+                  id="match-players"
+                  type="range"
+                  min="2"
+                  max="30"
+                  step="1"
+                  value={maxPlayers}
+                  onChange={(e) => setMaxPlayers(Number(e.target.value))}
+                  className="w-full accent-blue-600 cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Play Together (Friend Invites) */}
+          {friends.length > 0 && (
+            <div className="apple-double-bezel shadow-lg">
+              <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8">
+                <p className="text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400 mb-3">
+                  Invite Friends (Optional)
                 </p>
-              )}
+
+                <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                  {friends.map((friend) => {
+                    const isInvited = selectedFriends.includes(friend._id);
+                    return (
+                      <button
+                        type="button"
+                        key={friend._id}
+                        onClick={() => toggleFriend(friend._id)}
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all ${
+                          isInvited
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "bg-black/[0.04] dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 hover:bg-black/[0.08]"
+                        }`}
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>{friend.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Submit */}
+          {/* Submit Action */}
           <button
             type="submit"
-            disabled={loading || !selectedSport || !location.name}
-            style={{
-              width: "100%",
-              padding: "14px",
-              borderRadius: 14,
-              background:
-                !selectedSport || !location.name
-                  ? "var(--border)"
-                  : "var(--accent)",
-              color:
-                !selectedSport || !location.name
-                  ? "var(--text-muted)"
-                  : "white",
-              fontWeight: 700,
-              fontSize: 16,
-              border: "none",
-              cursor:
-                loading || !selectedSport || !location.name
-                  ? "not-allowed"
-                  : "pointer",
-              opacity: loading ? 0.7 : 1,
-              transition: "all 0.15s",
-            }}
+            disabled={loading}
+            className="w-full min-h-[52px] py-4 px-6 rounded-2xl font-bold text-base text-white bg-blue-600 hover:bg-blue-500 active:scale-[0.99] transition-all shadow-lg shadow-blue-600/30 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading
-              ? "Creating..."
-              : selectedFriends.length > 0
-                ? `Create & Invite ${selectedFriends.length} Friend${selectedFriends.length > 1 ? "s" : ""} 🚀`
-                : "Create Match 🚀"}
+            {loading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Publishing Match...</span>
+              </div>
+            ) : (
+              <>
+                <span>Publish Match to Radar</span>
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
           </button>
         </form>
       </div>
     </div>
   );
 }
-
-export default CreateMatch;
