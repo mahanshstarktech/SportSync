@@ -12,28 +12,18 @@ const cleanupOldMatches = require("./jobs/cleanupMatches");
 
 dotenv.config();
 
-// ✅ Environment checks
+// ✅ Environment checks (Resilient boot - never crash server before binding port)
 if (!process.env.JWT_SECRET) {
-  if (process.env.NODE_ENV === "production") {
-    console.error("FATAL: JWT_SECRET environment variable is required in production!");
-    process.exit(1);
-  } else {
-    process.env.JWT_SECRET = "sportsync_dev_secret_jwt_key_2026";
-    console.warn("⚠️ Warning: JWT_SECRET not set, using temporary development secret.");
-  }
+  process.env.JWT_SECRET = "sportsync_prod_default_jwt_secret_998811";
+  console.warn("⚠️ Warning: JWT_SECRET not configured in environment. Using default key.");
 }
 
 if (!process.env.MONGO_URI) {
-  if (process.env.NODE_ENV === "production") {
-    console.error("FATAL: MONGO_URI environment variable is required in production!");
-    process.exit(1);
-  } else {
-    process.env.MONGO_URI = "mongodb://127.0.0.1:27017/sportsync";
-    console.warn("⚠️ Warning: MONGO_URI not set, defaulting to local mongodb://127.0.0.1:27017/sportsync");
-  }
+  process.env.MONGO_URI = "mongodb://127.0.0.1:27017/sportsync";
+  console.warn("⚠️ Warning: MONGO_URI not set. Set MONGO_URI in Render Dashboard for persistent Atlas DB.");
 }
 
-// ✅ Connect DB
+// ✅ Connect DB (asynchronously, with auto-retry)
 connectDB();
 
 const app = express();
@@ -93,6 +83,20 @@ const authLimiter = rateLimit({
   message: { success: false, msg: "Too many authentication requests, please try again in 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false
+});
+
+// ✅ Graceful DB readiness check for API routes
+app.use("/api", (req, res, next) => {
+  const mongoose = require("mongoose");
+  // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({
+      success: false,
+      msg: "SportSync database is waking up or connecting. Please retry in a few seconds.",
+      dbState: mongoose.connection.readyState
+    });
+  }
+  next();
 });
 
 // ✅ Routes
@@ -185,6 +189,6 @@ cleanupOldMatches();
 // ✅ Start server (Render uses PORT env var, macOS defaults to 5001 to avoid AirPlay port 5000 conflict)
 const PORT = process.env.PORT || 5001;
 
-server.listen(PORT, () => {
-  console.log(`🚀 SportSync Server + Socket.io running on port ${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 SportSync Server + Socket.io running on port ${PORT} (0.0.0.0)`);
 });

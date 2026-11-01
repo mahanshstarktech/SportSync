@@ -14,6 +14,7 @@ export const API_URL = `${BASE_URL.replace(/\/+$/, "")}/api`;
 
 // ============================================================================
 // AXIOS INSTANCE (PRODUCTION-GRADE TIMEOUT & CREDENTIALS)
+// Set to 60s to accommodate free-tier cold starts on Render without aborting
 // ============================================================================
 const API = axios.create({
   baseURL: API_URL,
@@ -21,8 +22,17 @@ const API = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
+  timeout: 60000,
 });
+
+// Wake up Render free-tier instance asynchronously on client load
+export const pingServer = () => {
+  try {
+    fetch(`${BASE_URL}/`, { method: "GET", mode: "no-cors" }).catch(() => {});
+  } catch {
+    // Non-blocking ping
+  }
+};
 
 // ============================================================================
 // REQUEST INTERCEPTOR: JWT AUTHORIZATION INJECTION

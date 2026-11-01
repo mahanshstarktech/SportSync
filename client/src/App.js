@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
 import SafeGoogleMapsWrapper from "./components/SafeGoogleMapsWrapper";
+import { pingServer } from "./services/api";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -21,6 +23,10 @@ import TournamentDetails from "./pages/TournamentDetails";
 import CreateTournament from "./pages/CreateTournament";
 
 function App() {
+  useEffect(() => {
+    pingServer();
+  }, []);
+
   return (
     <ThemeProvider>
       <SafeGoogleMapsWrapper>
