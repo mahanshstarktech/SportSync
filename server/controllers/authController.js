@@ -91,18 +91,22 @@ exports.registerRequestOtp = async (req, res) => {
       createdAt: new Date(),
     });
 
-    // Send Real OTP (Resend HTTPS / Fast SMTP / Fallback)
+    // Send Real OTP (Resend HTTPS / Fast SMTP)
     const emailResult = await sendOtpEmail(email, name, otp);
+
+    if (!emailResult.delivered) {
+      return res.status(502).json({
+        success: false,
+        msg: emailResult.error || "Unable to send verification email. Please verify email credentials in Render.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
-      delivered: emailResult.delivered,
-      msg: emailResult.delivered
-        ? `A 6-digit confirmation code has been sent to ${email}.`
-        : `Verification code generated. (Cloud host restricted outbound SMTP; check console or use code below).`,
+      delivered: true,
+      msg: `A 6-digit confirmation code has been sent to ${email}. Please check your inbox.`,
       email,
       expiresIn: 600, // 10 minutes
-      ...(emailResult.fallback ? { codeHint: emailResult.otp } : {}),
     });
   } catch (err) {
     console.error("[Auth Request OTP Error]:", err);
@@ -238,14 +242,18 @@ exports.resendOtp = async (req, res) => {
 
     const emailResult = await sendOtpEmail(email, pending.name, newOtp);
 
+    if (!emailResult.delivered) {
+      return res.status(502).json({
+        success: false,
+        msg: emailResult.error || "Unable to resend verification email.",
+      });
+    }
+
     return res.json({
       success: true,
-      delivered: emailResult.delivered,
-      msg: emailResult.delivered
-        ? `A fresh 6-digit confirmation code has been sent to ${email}.`
-        : `Fresh verification code generated.`,
+      delivered: true,
+      msg: `A fresh 6-digit confirmation code has been sent to ${email}. Please check your inbox.`,
       expiresIn: 600,
-      ...(emailResult.fallback ? { codeHint: emailResult.otp } : {}),
     });
   } catch (err) {
     console.error("[Auth Resend OTP Error]:", err);

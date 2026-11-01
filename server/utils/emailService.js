@@ -86,9 +86,12 @@ function getAppleEmailTemplate(name, otp) {
  */
 async function sendViaResendHttp(apiKey, email, name, otp) {
   try {
-    const fromAddress = process.env.EMAIL_FROM || "SportSync <onboarding@resend.dev>";
+    // Note: Resend test domain must be strictly 'onboarding@resend.dev'
+    const fromAddress = process.env.EMAIL_FROM || "onboarding@resend.dev";
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+    console.log(`[Email Service] Sending Resend HTTP POST to https://api.resend.com/emails for ${email}...`);
 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -99,7 +102,7 @@ async function sendViaResendHttp(apiKey, email, name, otp) {
       signal: controller.signal,
       body: JSON.stringify({
         from: fromAddress,
-        to: [email],
+        to: [email.toLowerCase().trim()],
         subject: `Your SportSync Verification Code: ${otp}`,
         html: getAppleEmailTemplate(name, otp),
       }),
@@ -108,16 +111,17 @@ async function sendViaResendHttp(apiKey, email, name, otp) {
     clearTimeout(timeoutId);
     const data = await res.json();
 
-    if (res.ok) {
+    if (res.ok && data?.id) {
       console.log(`[Email Service] ✅ Real email sent via Resend HTTPS to ${email} (Id: ${data.id})`);
       return { success: true, delivered: true, id: data.id };
     } else {
       console.error("[Email Service] ⚠️ Resend API returned error:", data);
-      return { success: false, delivered: false, error: data.message || "Resend API error" };
+      const detail = data?.message || data?.error || JSON.stringify(data);
+      return { success: false, delivered: false, error: `Resend API: ${detail}` };
     }
   } catch (err) {
     console.error("[Email Service] ⚠️ Resend HTTPS request failed:", err.message);
-    return { success: false, delivered: false, error: err.message };
+    return { success: false, delivered: false, error: `Resend Network Error: ${err.message}` };
   }
 }
 
@@ -129,25 +133,23 @@ async function sendViaSmtpWithTimeout(email, name, otp) {
   const pass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, "").trim() : "";
 
   if (!user || !pass) {
-    return { success: false, delivered: false, error: "NO_CREDENTIALS" };
+    return { success: false, delivered: false, error: "Missing EMAIL_USER or EMAIL_PASS" };
   }
 
-  // Strict timeouts so SMTP socket never hangs the Express request
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT) || 465,
     secure: Number(process.env.SMTP_PORT) === 465 || !process.env.SMTP_PORT, // true for 465
     auth: { user, pass },
-    connectionTimeout: 5000, // 5s connection limit
+    connectionTimeout: 5000,
     greetingTimeout: 4000,
     socketTimeout: 5000,
   });
 
   const fromAddress = process.env.EMAIL_FROM || `"SportSync" <${user}>`;
 
-  // Race sendMail against a 6-second timeout
   const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error("SMTP connection timed out. Cloud host may restrict outbound SMTP ports (587/465).")), 6000)
+    setTimeout(() => reject(new Error("SMTP connection timed out. Cloud host restricted outbound SMTP ports (587/465).")), 6000)
   );
 
   const sendPromise = transporter.sendMail({
@@ -174,41 +176,52 @@ async function sendViaSmtpWithTimeout(email, name, otp) {
  * Priority:
  * 1. Resend HTTPS REST API (Port 443 — fast, reliable on Render)
  * 2. SMTP / Gmail (with 6s timeout guard)
- * 3. Safe fallback (prominently logs OTP to server console and returns recovery payload so athlete is never stuck)
+ * Strict Production Enforcement: Never fake delivery or leak OTP in API response.
  */
 async function sendOtpEmail(email, name, otp) {
+  let lastError = "";
+
   // 1. Try Resend HTTPS API if key present
   if (process.env.RESEND_API_KEY) {
+    console.log(`[Email Service] Attempting delivery via Resend HTTPS for ${email}...`);
     const resendResult = await sendViaResendHttp(process.env.RESEND_API_KEY, email, name, otp);
     if (resendResult.success) {
       return resendResult;
     }
+    lastError = resendResult.error;
+    console.warn(`[Email Service] Resend HTTPS delivery failed: ${lastError}`);
+  } else {
+    console.warn("[Email Service] ⚠️ RESEND_API_KEY is not configured in Render Environment Variables.");
   }
 
   // 2. Try SMTP if credentials present
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    console.log(`[Email Service] Attempting delivery via SMTP for ${email}...`);
     const smtpResult = await sendViaSmtpWithTimeout(email, name, otp);
     if (smtpResult.success) {
       return smtpResult;
     }
+    lastError = lastError ? `${lastError}; SMTP: ${smtpResult.error}` : smtpResult.error;
+    console.warn(`[Email Service] SMTP delivery failed: ${smtpResult.error}`);
   }
 
-  // 3. Fallback: Log OTP to console with high visibility
-  console.log(`================================================================`);
-  console.log(`⚡ [SportSync OTP Code for ${email}]: ${otp}`);
-  console.log(`================================================================`);
+  // 3. Strict failure handling — No OTP leak to frontend
+  const hasResend = !!process.env.RESEND_API_KEY;
+  const hasSmtp = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
 
-  // If credentials were provided but SMTP port timed out (Render free tier blocks SMTP ports):
-  const wasConfigured = !!(process.env.RESEND_API_KEY || (process.env.EMAIL_USER && process.env.EMAIL_PASS));
+  let failureMsg = "Email service not configured. Please set RESEND_API_KEY in Render Environment Variables.";
+  if (hasResend) {
+    failureMsg = `Resend delivery failed: ${lastError}. (Note: On Resend's free trial domain onboarding@resend.dev, you can only send to the email address registered on your Resend account).`;
+  } else if (hasSmtp) {
+    failureMsg = `SMTP delivery failed: ${lastError}.`;
+  }
+
+  console.error(`[Email Service] ❌ Final email delivery failure for ${email}: ${failureMsg}`);
 
   return {
-    success: true, // Allow registration flow to proceed smoothly
+    success: false,
     delivered: false,
-    fallback: true,
-    otp, // Passed for instant recovery if cloud host blocked outbound email ports
-    msg: wasConfigured
-      ? "Email port blocked by cloud host. Verification code logged to server console."
-      : "Email service not configured. Verification code logged to server console.",
+    error: failureMsg,
   };
 }
 
