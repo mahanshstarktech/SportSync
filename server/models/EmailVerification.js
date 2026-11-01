@@ -34,3 +34,4 @@ const emailVerificationSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model("EmailVerification", emailVerificationSchema);
+

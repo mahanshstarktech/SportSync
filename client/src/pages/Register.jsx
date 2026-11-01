@@ -39,7 +39,6 @@ export default function Register() {
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
   const [countdown, setCountdown] = useState(60);
   const [resending, setResending] = useState(false);
-  const [simulatedOtp, setSimulatedOtp] = useState("");
 
   const digitRefs = useRef([]);
 
@@ -127,10 +126,6 @@ export default function Register() {
         setCountdown(60);
         setOtpDigits(["", "", "", "", "", ""]);
         setSuccessNotice(`Verification code sent to ${trimmedEmail}`);
-
-        if (res.data.devOtp) {
-          setSimulatedOtp(res.data.devOtp);
-        }
       } else {
         setErrorMsg(res.data?.msg || "Unable to send verification code. Please try again.");
       }
@@ -250,9 +245,6 @@ export default function Register() {
         setCountdown(60);
         setOtpDigits(["", "", "", "", "", ""]);
         setSuccessNotice("A fresh verification code has been sent!");
-        if (res.data.devOtp) {
-          setSimulatedOtp(res.data.devOtp);
-        }
         digitRefs.current[0]?.focus();
       } else {
         setErrorMsg(res.data?.msg || "Unable to resend verification code.");
@@ -366,24 +358,6 @@ export default function Register() {
                 <div className="mt-4 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs 2xl:text-sm font-medium flex items-center gap-2.5 animate-slide-up">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />
                   <span className="flex-1 leading-snug">{successNotice}</span>
-                </div>
-              )}
-
-              {/* Dev/Simulated OTP Banner (Helps immediate testing if SMTP not yet configured on host) */}
-              {simulatedOtp && step === "otp" && (
-                <div className="mt-3 p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs flex items-center justify-between">
-                  <span>Dev Mode Code: <strong className="font-mono tracking-widest">{simulatedOtp}</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const arr = simulatedOtp.split("");
-                      setOtpDigits(arr);
-                      executeVerify(simulatedOtp);
-                    }}
-                    className="underline text-[11px] font-semibold hover:text-blue-700"
-                  >
-                    Auto-Fill
-                  </button>
                 </div>
               )}
 

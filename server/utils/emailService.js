@@ -2,24 +2,41 @@ const nodemailer = require("nodemailer");
 
 /**
  * Configure Nodemailer Transporter
- * Supports Gmail, Brevo, Sendgrid, Resend, or standard SMTP
+ * Supports:
+ * 1. Resend API Key (smtp.resend.com)
+ * 2. Gmail SMTP with App Password (EMAIL_USER + EMAIL_PASS)
+ * 3. Custom SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)
  */
 function createTransporter() {
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
+  // Option 1: Resend (100% Free - 3,000 emails/mo)
+  if (process.env.RESEND_API_KEY) {
+    return nodemailer.createTransport({
+      host: "smtp.resend.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: "resend",
+        pass: process.env.RESEND_API_KEY,
+      },
+    });
+  }
 
+  // Option 2: Custom SMTP Host
   if (process.env.SMTP_HOST) {
     return nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT) || 587,
       secure: Number(process.env.SMTP_PORT) === 465,
       auth: {
-        user: process.env.SMTP_USER || user,
-        pass: process.env.SMTP_PASS || pass,
+        user: process.env.SMTP_USER || process.env.EMAIL_USER,
+        pass: process.env.SMTP_PASS || process.env.EMAIL_PASS,
       },
     });
   }
 
+  // Option 3: Gmail with App Password (100% Free)
+  const user = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
   if (user && pass) {
     return nodemailer.createTransport({
       service: process.env.EMAIL_SERVICE || "gmail",
@@ -65,7 +82,7 @@ function getAppleEmailTemplate(name, otp) {
                 Hello <strong>${name}</strong>,
               </p>
               <p style="margin: 8px 0 0; font-size: 14px; color: #9ca3af; line-height: 1.6;">
-                Welcome to SportSync! To complete your athlete profile and start organizing matches, please enter the following 6-digit confirmation code:
+                Welcome to SportSync! To verify your email and activate your athlete profile, please enter this 6-digit confirmation code:
               </p>
             </td>
           </tr>
@@ -85,7 +102,7 @@ function getAppleEmailTemplate(name, otp) {
           <tr>
             <td style="padding-bottom: 24px; text-align: center;">
               <p style="margin: 0; font-size: 13px; color: #6b7280; line-height: 1.5;">
-                ⏱️ This verification code is valid for <strong>10 minutes</strong>.<br>
+                ⏱️ This code will expire in <strong>10 minutes</strong>.<br>
                 For your security, never share this code with anyone.
               </p>
             </td>
@@ -112,46 +129,52 @@ function getAppleEmailTemplate(name, otp) {
 }
 
 /**
- * Send OTP to Athlete's Email
+ * Send Real OTP to Athlete's Email
  */
 async function sendOtpEmail(email, name, otp) {
   const transporter = createTransporter();
 
-  // If email transporter is configured, send via SMTP
-  if (transporter) {
-    try {
-      const fromAddress = process.env.EMAIL_FROM || `"SportSync" <${process.env.EMAIL_USER || "noreply@sportsync.app"}>`;
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to: email,
-        subject: `Your SportSync Verification Code: ${otp}`,
-        text: `Hello ${name},\n\nYour SportSync verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nSportSync Team`,
-        html: getAppleEmailTemplate(name, otp),
-      });
-
-      console.log(`[Email Service] ✅ OTP sent to ${email} (MessageId: ${info.messageId})`);
-      return { success: true, delivered: true };
-    } catch (err) {
-      console.error(`[Email Service] ⚠️ Failed to deliver email to ${email}:`, err.message);
-      // Fall through to simulated success so user is not blocked
-    }
-  } else {
-    console.log(`[Email Service] ℹ️ EMAIL_USER / EMAIL_PASS not set in environment.`);
+  if (!transporter) {
+    console.error("[Email Service] ❌ No email delivery credentials found!");
+    console.error("💡 Action Required: Set EMAIL_USER & EMAIL_PASS (Gmail App Password) or RESEND_API_KEY in Render Dashboard.");
+    return {
+      success: false,
+      delivered: false,
+      error: "EMAIL_NOT_CONFIGURED",
+      msg: "Email service is not configured. Please set EMAIL_USER & EMAIL_PASS (or RESEND_API_KEY) in Render environment variables.",
+    };
   }
 
-  // Simulated fallback: Log OTP prominently so developers or users can verify immediately
-  console.log(`=======================================================`);
-  console.log(`[SportSync OTP Verification Code for ${email}]: ${otp}`);
-  console.log(`=======================================================`);
+  try {
+    const fromAddress =
+      process.env.EMAIL_FROM ||
+      (process.env.RESEND_API_KEY
+        ? `"SportSync" <onboarding@resend.dev>`
+        : `"SportSync" <${process.env.EMAIL_USER}>`);
 
-  return {
-    success: true,
-    delivered: false,
-    simulated: true,
-    otp, // Returned in simulated mode to assist testing before SMTP credentials are configured
-  };
+    const info = await transporter.sendMail({
+      from: fromAddress,
+      to: email,
+      subject: `Your SportSync Verification Code: ${otp}`,
+      text: `Hello ${name},\n\nYour SportSync verification code is: ${otp}\n\nThis code will expire in 10 minutes.\n\nSportSync Team`,
+      html: getAppleEmailTemplate(name, otp),
+    });
+
+    console.log(`[Email Service] ✅ Real email sent to ${email} (MessageId: ${info.messageId})`);
+    return { success: true, delivered: true, messageId: info.messageId };
+  } catch (err) {
+    console.error(`[Email Service] ❌ Failed to deliver email to ${email}:`, err.message);
+    return {
+      success: false,
+      delivered: false,
+      error: err.message,
+      msg: `Failed to deliver email: ${err.message}. Please check your Gmail App Password or SMTP settings.`,
+    };
+  }
 }
 
 module.exports = {
   sendOtpEmail,
 };
+
+
