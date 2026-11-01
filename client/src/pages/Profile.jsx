@@ -211,11 +211,22 @@ export default function Profile() {
                 <RefreshCw className="w-4 h-4" />
                 <span>Retry</span>
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.clear();
+                  navigate("/");
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-slate-800 dark:text-white font-medium text-xs sm:text-sm border border-black/5 dark:border-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sign In Again</span>
+              </button>
               <Link
                 to="/dashboard"
                 className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-slate-800 dark:text-white font-medium text-xs sm:text-sm border border-black/5 dark:border-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
-                <span>Return to Dashboard</span>
+                <span>Dashboard</span>
               </Link>
             </div>
           </div>

@@ -76,6 +76,30 @@ app.use(
 // ✅ Middleware
 app.use(express.json({ limit: "2mb" }));
 
+// ✅ Immediate Health routes (Render and Cloudflare status monitor — always return HTTP 200)
+app.get("/", (req, res) => {
+  const mongoose = require("mongoose");
+  res.status(200).json({
+    status: "ok",
+    service: "SportSync API",
+    version: "2.0.0",
+    database: mongoose.connection.readyState === 1 ? "connected" : "connecting_or_disconnected",
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/health", (req, res) => {
+  const mongoose = require("mongoose");
+  const isConnected = mongoose.connection.readyState === 1;
+  res.status(200).json({
+    status: isConnected ? "healthy" : "degraded",
+    database: isConnected ? "connected" : "connecting_or_disconnected",
+    dbState: mongoose.connection.readyState,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // ✅ Rate limiter for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -93,7 +117,7 @@ app.use("/api", (req, res, next) => {
     const isUriConfigured = !!process.env.MONGO_URI && !process.env.MONGO_URI.includes("127.0.0.1");
     const advice = !isUriConfigured
       ? "MongoDB Atlas URI is not set. Please add MONGO_URI in Render Dashboard -> Environment Variables."
-      : "Connecting to MongoDB Atlas... If this persists, ensure MongoDB Atlas Network Access is set to 0.0.0.0/0 (Allow from anywhere).";
+      : "Connecting to MongoDB Atlas... If this persists, verify your database password in Atlas -> Database Access, and ensure Network Access has 0.0.0.0/0 allowed.";
 
     return res.status(503).json({
       success: false,
@@ -114,27 +138,6 @@ app.use("/api/dm",            require("./routes/dmRoutes"));
 app.use("/api/activity",      require("./routes/activityRoutes"));
 app.use("/api/tournaments",   require("./routes/tournamentRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
-
-// ✅ Health route (Render and Cloudflare status monitor)
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "SportSync API",
-    version: "2.0.0",
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get("/health", (req, res) => {
-  const mongoose = require("mongoose");
-  const isConnected = mongoose.connection.readyState === 1;
-  res.status(isConnected ? 200 : 503).json({
-    status: isConnected ? "healthy" : "degraded",
-    database: isConnected ? "connected" : "disconnected",
-    timestamp: new Date().toISOString()
-  });
-});
 
 // ✅ Error handler
 app.use(errorHandler);
