@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
 
 function MotmSection({ matchId, approvedPlayers, isHost, isApproved, userId, sport }) {
-  const [myVote, setMyVote] = useState(null);
+  const [, setMyVote] = useState(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [votes, setVotes] = useState([]);
   const [totalVotes, setTotalVotes] = useState(0);

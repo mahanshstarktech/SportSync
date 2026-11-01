@@ -49,7 +49,6 @@ function BracketView({ tournament, isHost, onDeclareResult }) {
         {rounds.map((round, rIdx) => {
           const x = rIdx * (CARD_W + ROUND_GAP) + 20;
           const { spacing } = roundPositions[rIdx];
-          const maxH = roundPositions[0].totalHeight;
 
           return (
             <g key={round.roundNumber}>
@@ -71,9 +70,6 @@ function BracketView({ tournament, isHost, onDeclareResult }) {
               {round.matches.map((match, mIdx) => {
                 const matchY = 36 + mIdx * spacing + (spacing - CARD_H - MATCH_GAP) / 2;
                 const isCompleted = match.status === "completed";
-                const isBye = match.teamBName === "BYE";
-                const canDeclare = isHost && !isCompleted && !isBye
-                  && match.teamAName !== "TBD" && match.teamBName !== "TBD";
 
                 const teamAWon = isCompleted && match.winnerName === match.teamAName;
                 const teamBWon = isCompleted && match.winnerName === match.teamBName;
@@ -661,8 +657,6 @@ function TournamentDetails() {
             ) : (
               tournament.teams.map((team, i) => {
                 const isWinner = tournament.winner?.toString() === team._id?.toString();
-                const winRate = (team.wins + team.losses) > 0
-                  ? Math.round((team.wins / (team.wins + team.losses)) * 100) : 0;
 
                 return (
                   <div

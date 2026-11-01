@@ -70,7 +70,6 @@ const SPORT_EMOJIS = {
 function BadgesSection({ badges, motmCount }) {
   const [activeTab, setActiveTab] = useState("all");
 
-  const universalBadges = (badges || []).filter(b => !b.sport);
   const sportBadgeMap = {};
   (badges || []).filter(b => b.sport).forEach(b => {
     if (!sportBadgeMap[b.sport]) sportBadgeMap[b.sport] = [];

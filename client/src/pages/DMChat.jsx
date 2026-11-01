@@ -11,7 +11,7 @@ function DMChat() {
   const navigate = useNavigate();
 
   const [messages, setMessages] = useState([]);
-  const [conversationId, setConversationId] = useState(null);
+  const [, setConversationId] = useState(null);
   const [friendInfo, setFriendInfo] = useState(null);
   const [text, setText] = useState("");
   const [connected, setConnected] = useState(false);
