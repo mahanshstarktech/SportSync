@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
@@ -6,6 +6,8 @@ import {
   Users,
   ArrowRight,
   UserCheck,
+  Check,
+  Sparkles,
 } from "lucide-react";
 import API from "../services/api";
 import LocationSearchInput from "../components/LocationSearchInput";
@@ -25,17 +27,71 @@ const SPORTS = [
   { name: "Boxing", emoji: "🥊", defaultPlayers: 2 },
 ];
 
+const TIME_SLOTS = [
+  { value: "07:00", label: "07:00 AM", period: "Morning Kickoff" },
+  { value: "09:00", label: "09:00 AM", period: "Midday Session" },
+  { value: "17:00", label: "05:00 PM", period: "Evening Rush" },
+  { value: "18:30", label: "06:30 PM", period: "Prime Sunset" },
+  { value: "20:00", label: "08:00 PM", period: "Night Lights" },
+];
+
+// Helper to format date object to YYYY-MM-DD local string
+const toLocalIsoDate = (d) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function CreateMatch() {
   const navigate = useNavigate();
 
+  // Compute preset dates based on user's current local time
+  const datePresets = useMemo(() => {
+    const now = new Date();
+
+    // Today
+    const today = new Date(now);
+    const todayIso = toLocalIsoDate(today);
+
+    // Tomorrow
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowIso = toLocalIsoDate(tomorrow);
+
+    // Upcoming Weekend (Saturday)
+    const weekend = new Date(now);
+    const dayOfWeek = weekend.getDay();
+    const daysUntilSat = 6 - dayOfWeek <= 0 ? 7 : 6 - dayOfWeek;
+    weekend.setDate(weekend.getDate() + daysUntilSat);
+    const weekendIso = toLocalIsoDate(weekend);
+
+    return {
+      today: {
+        id: "today",
+        label: "Today",
+        iso: todayIso,
+        sub: today.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      },
+      tomorrow: {
+        id: "tomorrow",
+        label: "Tomorrow",
+        iso: tomorrowIso,
+        sub: tomorrow.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      },
+      weekend: {
+        id: "weekend",
+        label: "Weekend",
+        iso: weekendIso,
+        sub: weekend.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+      },
+    };
+  }, []);
+
   // Form State
   const [selectedSport, setSelectedSport] = useState("Football");
-  const [matchDate, setMatchDate] = useState(() => {
-    // Tomorrow default
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
-  });
+  const [activeDatePreset, setActiveDatePreset] = useState("tomorrow");
+  const [matchDate, setMatchDate] = useState(() => datePresets.tomorrow.iso);
   const [matchTime, setMatchTime] = useState("18:30");
   const [maxPlayers, setMaxPlayers] = useState(10);
   const [title, setTitle] = useState("");
@@ -49,8 +105,7 @@ export default function CreateMatch() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Today string for min date
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toLocalIsoDate(new Date());
 
   useEffect(() => {
     API.get("/friends")
@@ -78,25 +133,69 @@ export default function CreateMatch() {
     setErrorMsg("");
   };
 
-  // Quick Date presets
-  const setQuickDate = (type) => {
-    const d = new Date();
-    if (type === "today") {
-      setMatchDate(d.toISOString().split("T")[0]);
-    } else if (type === "tomorrow") {
-      d.setDate(d.getDate() + 1);
-      setMatchDate(d.toISOString().split("T")[0]);
-    } else if (type === "weekend") {
-      // Find upcoming Saturday
-      const day = d.getDay();
-      const diff = d.getDate() + (6 - day + (day === 6 ? 7 : 0));
-      d.setDate(diff);
-      setMatchDate(d.toISOString().split("T")[0]);
+  // Select Quick Date Preset
+  const handleSelectDatePreset = (presetKey) => {
+    const preset = datePresets[presetKey];
+    if (preset) {
+      setActiveDatePreset(presetKey);
+      setMatchDate(preset.iso);
+      setErrorMsg("");
     }
   };
 
-  // Quick Time presets
-  const quickTimes = ["07:00", "09:00", "17:00", "18:30", "20:00"];
+  // Custom Date Input Change
+  const handleCustomDateChange = (isoVal) => {
+    setMatchDate(isoVal);
+    // Check if matches one of the presets
+    if (isoVal === datePresets.today.iso) {
+      setActiveDatePreset("today");
+    } else if (isoVal === datePresets.tomorrow.iso) {
+      setActiveDatePreset("tomorrow");
+    } else if (isoVal === datePresets.weekend.iso) {
+      setActiveDatePreset("weekend");
+    } else {
+      setActiveDatePreset("custom");
+    }
+    setErrorMsg("");
+  };
+
+  const handleSelectTime = (val) => {
+    setMatchTime(val);
+    setErrorMsg("");
+  };
+
+  // Formatted date preview for Apple card
+  const formattedDatePreview = useMemo(() => {
+    if (!matchDate) return "";
+    try {
+      const parts = matchDate.split("-");
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      return d.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return matchDate;
+    }
+  }, [matchDate]);
+
+  // Formatted 12-hour time preview
+  const formattedTimePreview = useMemo(() => {
+    if (!matchTime) return "";
+    const slot = TIME_SLOTS.find((s) => s.value === matchTime);
+    if (slot) return `${slot.label} (${slot.period})`;
+    try {
+      const [h, m] = matchTime.split(":");
+      const hours = Number(h);
+      const ampm = hours >= 12 ? "PM" : "AM";
+      const displayHours = hours % 12 || 12;
+      return `${String(displayHours).padStart(2, "0")}:${m} ${ampm}`;
+    } catch {
+      return matchTime;
+    }
+  }, [matchTime]);
 
   const handleCreateMatch = async (e) => {
     e.preventDefault();
@@ -117,7 +216,7 @@ export default function CreateMatch() {
       return;
     }
 
-    // Combine date & time into ISO string
+    // Combine date & time into local Date object
     const matchDateTime = new Date(`${matchDate}T${matchTime}`);
     if (isNaN(matchDateTime.getTime())) {
       setErrorMsg("Invalid date/time format.");
@@ -236,7 +335,7 @@ export default function CreateMatch() {
             </div>
           </div>
 
-          {/* Card 2: Match Title & Venue */}
+          {/* Card 2: Match Title & Venue (Space-Optimized Inline Drawer) */}
           <div className="apple-double-bezel shadow-lg">
             <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 space-y-5">
               {/* Title */}
@@ -257,7 +356,7 @@ export default function CreateMatch() {
                 />
               </div>
 
-              {/* Advanced Location Search */}
+              {/* Advanced Location Search (In-Flow Expansion - NEVER overlaps other cards) */}
               <div>
                 <label className="block text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400 mb-1.5">
                   Match Venue & Pitch
@@ -267,105 +366,156 @@ export default function CreateMatch() {
             </div>
           </div>
 
-          {/* Card 3: Separate Date & Time Columns with Selectors */}
+          {/* Card 3: Separate Date & Time Columns with Apple Selectors */}
           <div className="apple-double-bezel shadow-lg">
             <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 space-y-6">
-              <p className="text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400">
-                Match Schedule & Capacity
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs 2xl:text-sm font-semibold tracking-wide uppercase text-slate-600 dark:text-slate-400">
+                  Match Schedule & Capacity
+                </p>
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Interactive Selectors</span>
+                </span>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Column 1: Date Selector */}
-                <div className="space-y-2.5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Column 1: Apple Date Selector */}
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label
-                      htmlFor="match-date"
-                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-blue-500" />
                       <span>Select Date</span>
                     </label>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setQuickDate("today")}
-                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-black/[0.04] dark:bg-white/[0.08] hover:bg-blue-600 hover:text-white transition-colors"
-                      >
-                        Today
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setQuickDate("tomorrow")}
-                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-black/[0.04] dark:bg-white/[0.08] hover:bg-blue-600 hover:text-white transition-colors"
-                      >
-                        Tomorrow
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setQuickDate("weekend")}
-                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-black/[0.04] dark:bg-white/[0.08] hover:bg-blue-600 hover:text-white transition-colors"
-                      >
-                        Weekend
-                      </button>
-                    </div>
+                    {activeDatePreset !== "custom" && (
+                      <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                        {datePresets[activeDatePreset]?.label}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="relative">
+                  {/* 3 Large Apple Date Presets */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.values(datePresets).map((preset) => {
+                      const isActive = activeDatePreset === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectDatePreset(preset.id)}
+                          className={`p-3 rounded-xl flex flex-col items-center justify-center text-center transition-all ${
+                            isActive
+                              ? "bg-blue-600 text-white shadow-md shadow-blue-500/30 scale-[1.02] ring-2 ring-blue-500/40"
+                              : "bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-300 border border-black/5 dark:border-white/10"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold">{preset.label}</span>
+                            {isActive && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <span className={`text-[10px] mt-0.5 ${isActive ? "text-blue-100" : "text-slate-500 dark:text-slate-400"}`}>
+                            {preset.sub}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Date Input for Any Date */}
+                  <div>
+                    <label htmlFor="match-date" className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                      Or pick another date:
+                    </label>
                     <input
                       id="match-date"
                       type="date"
                       min={todayStr}
                       value={matchDate}
-                      onChange={(e) => setMatchDate(e.target.value)}
+                      onChange={(e) => handleCustomDateChange(e.target.value)}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono"
+                      className="w-full px-4 py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono"
                     />
                   </div>
+
+                  {/* Formatted Date Confirmation Banner */}
+                  {formattedDatePreview && (
+                    <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        <strong>Date:</strong> {formattedDatePreview}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Column 2: Time Selector */}
-                <div className="space-y-2.5">
+                {/* Column 2: Apple Time Selector */}
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label
-                      htmlFor="match-time"
-                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"
-                    >
-                      <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Select Time</span>
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-500" />
+                      <span>Select Kickoff Time</span>
                     </label>
-                    <div className="flex items-center gap-1 overflow-x-auto">
-                      {quickTimes.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setMatchTime(t)}
-                          className={`px-1.5 py-0.5 rounded-md text-[11px] font-mono font-medium transition-colors ${
-                            matchTime === t
-                              ? "bg-blue-600 text-white"
-                              : "bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] text-slate-700 dark:text-slate-300"
-                          }`}
-                        >
-                          {t}
-                        </button>
-                      ))}
-                    </div>
+                    <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                      {matchTime}
+                    </span>
                   </div>
 
-                  <div className="relative">
+                  {/* 5 Quick Time Slot Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {TIME_SLOTS.map((slot) => {
+                      const isActive = matchTime === slot.value;
+                      return (
+                        <button
+                          key={slot.value}
+                          type="button"
+                          onClick={() => handleSelectTime(slot.value)}
+                          className={`p-2.5 rounded-xl flex flex-col items-center justify-center text-center transition-all ${
+                            isActive
+                              ? "bg-blue-600 text-white shadow-md shadow-blue-500/30 scale-[1.02] ring-2 ring-blue-500/40"
+                              : "bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-300 border border-black/5 dark:border-white/10"
+                          }`}
+                        >
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold font-mono">{slot.label}</span>
+                            {isActive && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <span className={`text-[10px] mt-0.5 truncate ${isActive ? "text-blue-100" : "text-slate-500 dark:text-slate-400"}`}>
+                            {slot.period}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Time Input */}
+                  <div>
+                    <label htmlFor="match-time" className="block text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                      Or set specific time:
+                    </label>
                     <input
                       id="match-time"
                       type="time"
                       value={matchTime}
-                      onChange={(e) => setMatchTime(e.target.value)}
+                      onChange={(e) => handleSelectTime(e.target.value)}
                       required
-                      className="w-full px-4 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono"
+                      className="w-full px-4 py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono"
                     />
                   </div>
+
+                  {/* Formatted Time Confirmation Banner */}
+                  {formattedTimePreview && (
+                    <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">
+                        <strong>Kickoff:</strong> {formattedTimePreview}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Max Players Slider/Number */}
-              <div className="pt-2 border-t border-black/5 dark:border-white/10">
+              <div className="pt-4 border-t border-black/5 dark:border-white/10">
                 <div className="flex items-center justify-between mb-2">
                   <label
                     htmlFor="match-players"

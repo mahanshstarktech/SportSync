@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { MapPin, Navigation, CheckCircle2, X, Loader2 } from "lucide-react";
+import { MapPin, Navigation, CheckCircle2, X, Loader2, ChevronRight, Building } from "lucide-react";
 
 export default function LocationSearchInput({ onSelect, initialValue = "" }) {
   const [query, setQuery] = useState(initialValue);
@@ -10,12 +10,12 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
   const [isOpen, setIsOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const dropdownRef = useRef(null);
+  const containerRef = useRef(null);
 
-  // Close dropdown when clicking outside
+  // Close suggestions when clicking outside
   useEffect(() => {
     function handleClickOutside(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsOpen(false);
       }
     }
@@ -66,12 +66,11 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
         setIsOpen(formatted.length > 0);
       } catch (err) {
         console.warn("[Nominatim Autocomplete Notice]:", err.message);
-        // Graceful fallback suggestions based on query
         setSuggestions([]);
       } finally {
         setLoading(false);
       }
-    }, 350);
+    }, 320);
 
     return () => clearTimeout(timer);
   }, [query, selectedLocation]);
@@ -80,6 +79,7 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
   const handleSelect = (loc) => {
     setSelectedLocation(loc);
     setQuery(loc.name);
+    setSuggestions([]);
     setIsOpen(false);
     onSelect({
       name: loc.name,
@@ -94,13 +94,14 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
     setSelectedLocation(null);
     setQuery("");
     setSuggestions([]);
+    setIsOpen(false);
     onSelect({ name: "", lat: "", lng: "" });
   };
 
   // GPS One-Click Location Detection
   const handleUseGps = () => {
     if (!navigator.geolocation) {
-      setErrorMsg("Geolocation is not supported by your browser");
+      setErrorMsg("Geolocation is not supported by your browser.");
       return;
     }
 
@@ -111,42 +112,51 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
       async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-
         try {
+          // Reverse geocode with Nominatim (100% Free)
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
             {
               headers: {
                 "Accept-Language": "en",
               },
             }
           );
-          const data = await res.json();
-          const placeName =
-            data.name ||
-            data.address?.amenity ||
-            data.address?.leisure ||
-            data.address?.suburb ||
-            data.address?.city ||
-            "My Current Location";
+
+          let venueName = "Current Athlete GPS Location";
+          let fullName = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.display_name) {
+              const parts = data.display_name.split(", ");
+              venueName =
+                data.name ||
+                data.address?.leisure ||
+                data.address?.sport ||
+                data.address?.stadium ||
+                data.address?.suburb ||
+                parts[0] ||
+                "Nearby Sports Ground";
+              fullName = data.display_name;
+            }
+          }
 
           const loc = {
-            id: `gps-${Date.now()}`,
-            name: placeName,
-            fullName: data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-            subtitle: `${data.address?.city || data.address?.state || "Nearby"}, (${lat.toFixed(3)}, ${lng.toFixed(3)})`,
+            id: "gps-" + Date.now(),
+            name: venueName,
+            fullName,
+            subtitle: fullName.slice(0, 70),
             lat,
             lng,
           };
-
           handleSelect(loc);
         } catch {
-          // If reverse geocoding fails, still provide coordinates!
           const loc = {
-            id: `gps-${Date.now()}`,
-            name: "My GPS Sports Location",
+            id: "gps-" + Date.now(),
+            name: "Athlete GPS Position",
             fullName: `Coordinates: ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-            subtitle: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+            subtitle: `GPS Position`,
             lat,
             lng,
           };
@@ -164,7 +174,7 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
   };
 
   return (
-    <div className="relative w-full" ref={dropdownRef}>
+    <div className="w-full space-y-3" ref={containerRef}>
       {/* Search Input Box */}
       <div className="relative">
         <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -179,7 +189,7 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
           onFocus={() => {
             if (suggestions.length > 0) setIsOpen(true);
           }}
-          placeholder="Search venue, stadium, pitch or city..."
+          placeholder="Search stadium, turf, sports complex or city..."
           className="w-full pl-10 pr-24 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.06] border border-black/10 dark:border-white/15 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
         />
 
@@ -202,37 +212,39 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
             type="button"
             onClick={handleUseGps}
             disabled={gpsLoading}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-sm transition-all disabled:opacity-50"
-            title="Use current GPS location"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition-all disabled:opacity-50 active:scale-95"
+            title="Auto-detect current GPS location"
           >
             {gpsLoading ? (
               <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
               <Navigation className="w-3 h-3" />
             )}
-            <span className="hidden sm:inline">GPS</span>
+            <span>GPS</span>
           </button>
         </div>
       </div>
 
-      {/* Selected Location Pill */}
+      {/* Selected Location Card (Apple HIG Verified Style) */}
       {selectedLocation && (
-        <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 flex items-center justify-between text-xs animate-slide-up">
-          <div className="flex items-center gap-2 overflow-hidden">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+        <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300 flex items-center justify-between text-xs animate-slide-up">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
             <div className="truncate">
-              <span className="font-semibold text-slate-900 dark:text-white">
+              <p className="font-bold text-sm text-slate-900 dark:text-white truncate">
                 {selectedLocation.name}
-              </span>
-              <span className="ml-2 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-                ({selectedLocation.lat.toFixed(4)}, {selectedLocation.lng.toFixed(4)})
-              </span>
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                {selectedLocation.subtitle || selectedLocation.fullName}
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleClear}
-            className="text-xs text-slate-400 hover:text-red-500 ml-2 shrink-0 font-medium"
+            className="ml-3 px-3 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-red-500 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold shrink-0 transition-all"
           >
             Change
           </button>
@@ -240,36 +252,47 @@ export default function LocationSearchInput({ onSelect, initialValue = "" }) {
       )}
 
       {errorMsg && (
-        <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
-          ⚠️ {errorMsg}
+        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1.5">
+          <span>⚠️</span>
+          <span>{errorMsg}</span>
         </p>
       )}
 
-      {/* Autocomplete Dropdown */}
+      {/* Inline Space-Optimized Suggestions Drawer (Pushes card content naturally - NEVER overlaps other cards) */}
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-2 bg-white/95 dark:bg-[#161b22]/95 backdrop-blur-xl border border-black/10 dark:border-white/15 rounded-2xl shadow-2xl overflow-hidden animate-slide-up max-h-64 overflow-y-auto">
-          <div className="p-1.5">
-            {suggestions.map((loc) => (
-              <button
-                key={loc.id}
-                type="button"
-                onClick={() => handleSelect(loc)}
-                className="w-full flex items-start gap-3 p-2.5 rounded-xl text-left hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-              >
-                <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 mt-0.5">
-                  <MapPin className="w-3.5 h-3.5" />
+        <div className="rounded-2xl border border-black/10 dark:border-white/15 bg-black/[0.02] dark:bg-white/[0.04] p-2 space-y-1 animate-slide-up max-h-64 overflow-y-auto">
+          <div className="px-2 py-1 flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span>Suggested Pitches & Grounds ({suggestions.length})</span>
+            <span className="text-[10px] text-blue-500 font-normal">Tap to select</span>
+          </div>
+
+          {suggestions.map((loc) => (
+            <button
+              key={loc.id}
+              type="button"
+              onClick={() => handleSelect(loc)}
+              className="w-full flex items-center justify-between gap-3 p-2.5 rounded-xl text-left hover:bg-blue-600/10 dark:hover:bg-blue-500/15 border border-transparent hover:border-blue-500/20 transition-all group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 group-hover:scale-110 transition-transform">
+                  <Building className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white truncate">
+                  <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
                     {loc.name}
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                     {loc.subtitle}
                   </p>
                 </div>
-              </button>
-            ))}
-          </div>
+              </div>
+
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span>Select</span>
+                <ChevronRight className="w-3 h-3" />
+              </div>
+            </button>
+          ))}
         </div>
       )}
     </div>

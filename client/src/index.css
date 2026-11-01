@@ -145,3 +145,36 @@ h1, h2, h3, h4, h5, h6 {
 .smooth-press:active {
   transform: scale(0.975);
 }
+
+/* Apple Maps Theme for 100% Free OpenStreetMap Tiles (Zero API Key, Zero Watermarks) */
+.dark .apple-osm-map .leaflet-tile-pane {
+  filter: brightness(0.62) invert(1) contrast(2.6) hue-rotate(205deg) saturate(0.35) brightness(0.75);
+  -webkit-filter: brightness(0.62) invert(1) contrast(2.6) hue-rotate(205deg) saturate(0.35) brightness(0.75);
+}
+
+.apple-osm-map .leaflet-tile-pane {
+  filter: saturate(1.1) contrast(1.02);
+  -webkit-filter: saturate(1.1) contrast(1.02);
+}
+
+/* Apple-style Leaflet Popups */
+.apple-glass-popup .leaflet-popup-content-wrapper {
+  background: rgba(28, 28, 30, 0.92) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.apple-glass-popup .leaflet-popup-tip {
+  background: rgba(28, 28, 30, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.apple-glass-popup .leaflet-popup-content {
+  margin: 0 !important;
+  line-height: normal !important;
+}

@@ -52,11 +52,6 @@ export default function MapView() {
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Detect dark mode
-    const isDark =
-      document.documentElement.classList.contains("dark") ||
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-
     // Initialize Map
     const map = L.map(mapContainerRef.current, {
       center: DEFAULT_CENTER,
@@ -64,16 +59,14 @@ export default function MapView() {
       zoomControl: false,
     });
 
-    // High performance Retina CartoDB Tiles (100% Free, Zero API Keys, Gorgeous Apple Aesthetic)
-    const tileUrl = isDark
-      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+    // High performance official OpenStreetMap Tiles (100% Free, Zero API Keys, Zero Watermarks Forever)
+    const tileUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
     L.tileLayer(tileUrl, {
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
       maxZoom: 19,
-      subdomains: "abcd",
+      subdomains: ["a", "b", "c"],
     }).addTo(map);
 
     // Zoom control at bottom right
@@ -366,7 +359,7 @@ export default function MapView() {
             <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-2">
               <div
                 ref={mapContainerRef}
-                className="w-full h-[480px] sm:h-[560px] 2xl:h-[680px] rounded-2xl overflow-hidden relative z-0"
+                className="w-full h-[480px] sm:h-[560px] 2xl:h-[680px] rounded-2xl overflow-hidden relative z-0 apple-osm-map"
               />
             </div>
           </div>
