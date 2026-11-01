@@ -733,8 +733,8 @@ function Dashboard() {
         
         {/* Apple 3D Hero Island */}
         <div className="apple-double-bezel shadow-lg">
-          <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            <div className="md:col-span-8 flex flex-col justify-center">
+          <div className="apple-glass-card rounded-[calc(1.75rem-3px)] p-6 sm:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-8 flex flex-col justify-center">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold uppercase tracking-wider w-fit mb-3">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Live Arena Active</span>
@@ -771,8 +771,8 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* 3D Ball Canvas on the Right */}
-            <div className="md:col-span-4 flex justify-center items-center">
+            {/* 3D Ball Canvas on the Right - ONLY FOR BIGGER SCREENS (lg+) */}
+            <div className="hidden lg:flex lg:col-span-4 justify-center items-center">
               <div className="w-full max-w-[260px] rounded-2xl bg-white/40 dark:bg-white/5 border border-black/5 dark:border-white/10 p-2">
                 <Sports3DScene height="180px" activeSport={selectedSport === "All" ? "football" : selectedSport.toLowerCase()} />
               </div>

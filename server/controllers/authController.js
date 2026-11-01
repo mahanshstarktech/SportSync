@@ -102,12 +102,26 @@ exports.login = async (req, res) => {
 
     email = email.toLowerCase().trim();
 
-    const user = await User.findOne({ email });
+    let user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({
-        success: false,
-        msg: "Invalid email or password"
-      });
+      // Auto-provision demo account if requested
+      if (email === "alex.hunter@example.com" && password === "password123") {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash("password123", salt);
+        user = await User.create({
+          name: "Alex Hunter",
+          email: "alex.hunter@example.com",
+          password: hashedPassword,
+          sports: ["Football", "Basketball", "Tennis", "Cricket"],
+          skillLevel: "Advanced",
+          rating: 1450
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          msg: "Invalid email or password"
+        });
+      }
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

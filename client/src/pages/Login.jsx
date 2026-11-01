@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Eye, EyeOff, Lock, Mail, ArrowRight, Sparkles, CheckCircle2 } from "lucide-react";
-import API from "../services/api";
+import API, { DEMO_USER } from "../services/api";
 import Sports3DScene from "../components/Sports3DScene";
 
 export default function Login() {
@@ -10,6 +10,14 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const handleInstantDemoLogin = () => {
+    localStorage.setItem("token", "demo_jwt_token_alex_hunter_2026");
+    localStorage.setItem("userId", DEMO_USER._id);
+    localStorage.setItem("user", JSON.stringify(DEMO_USER));
+    localStorage.setItem("sportsSelected", "true");
+    navigate("/dashboard");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,6 +38,7 @@ export default function Login() {
 
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("userId", res.data.user._id);
+      localStorage.setItem("user", JSON.stringify(res.data.user));
 
       const userSports = res.data.user.sports || [];
       const alreadySelected =
@@ -42,12 +51,22 @@ export default function Login() {
       }
     } catch (err) {
       console.error("Login failure:", err);
+      const isNetworkError =
+        err.code === "ECONNABORTED" ||
+        !err.response ||
+        err.message === "Network Error" ||
+        (err.response && err.response.status >= 500);
+
+      // If backend is sleeping/offline OR user used demo credentials, seamlessly enter demo session
+      if (isNetworkError || trimmedEmail.toLowerCase() === "alex.hunter@example.com") {
+        handleInstantDemoLogin();
+        return;
+      }
+
       const serverMsg =
         err.response?.data?.msg ||
         err.response?.data?.message ||
-        (err.code === "ECONNABORTED"
-          ? "Request timed out. Please verify backend service."
-          : "Login failed. Please verify your credentials and connection.");
+        "Login failed. Please verify your credentials or click Instant Demo Access.";
       setErrorMsg(serverMsg);
     } finally {
       setLoading(false);
@@ -71,8 +90,8 @@ export default function Login() {
       </div>
 
       <div className="relative z-10 w-full max-w-6xl 2xl:max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-        {/* Left Column: 3D Interactive Sport Presentation */}
-        <div className="lg:col-span-6 xl:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left px-2 sm:px-4">
+        {/* Left Column: 3D Interactive Sport Presentation - HIDDEN ON MOBILE (< 1024px), VISIBLE ON BIGGER SCREENS (lg+) */}
+        <div className="hidden lg:flex lg:col-span-6 xl:col-span-7 flex-col items-center lg:items-start text-center lg:text-left px-2 sm:px-4">
           {/* Apple Eyebrow Tag */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800/60 mb-4 backdrop-blur-md">
             <span className="w-2 h-2 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse" />
@@ -117,7 +136,7 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Right Column: Apple-Style Auth Card */}
+        {/* Right Column: Apple-Style Auth Card - FOCUSED AND RESPONSIVE ON ALL SCREENS */}
         <div className="lg:col-span-6 xl:col-span-5 w-full max-w-md mx-auto">
           {/* Double-Bezel Enclosure */}
           <div className="apple-double-bezel shadow-2xl">
@@ -232,6 +251,24 @@ export default function Login() {
                   )}
                 </button>
               </form>
+
+              {/* Divider & One-Click Demo Access */}
+              <div className="relative flex py-3 items-center">
+                <div className="flex-grow border-t border-black/10 dark:border-white/10" />
+                <span className="flex-shrink mx-3 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
+                  or explore instantly
+                </span>
+                <div className="flex-grow border-t border-black/10 dark:border-white/10" />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleInstantDemoLogin}
+                className="w-full min-h-[44px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 border border-blue-200/60 dark:border-blue-800/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-blue-500" />
+                <span>⚡ Instant Demo Access (One-Click)</span>
+              </button>
 
               {/* Bottom Switcher */}
               <div className="mt-6 pt-5 border-t border-black/5 dark:border-white/10 text-center">
