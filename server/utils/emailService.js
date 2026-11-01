@@ -186,36 +186,94 @@ async function sendViaResendHttp(apiKey, email, name, otp) {
 }
 
 /**
+ * Deliver via Brevo (Sendinblue) HTTPS REST API (Port 443 - Can send to ANY recipient without domain lock)
+ */
+async function sendViaBrevoHttp(apiKey, email, name, otp) {
+  try {
+    const fromEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER || "sportsync.verify@gmail.com";
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    console.log(`[Brevo HTTP] Dispatching email to ${email} via Brevo HTTPS REST API...`);
+
+    const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": apiKey.trim(),
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        sender: { name: "SportSync", email: fromEmail },
+        to: [{ email: email.toLowerCase().trim(), name }],
+        subject: `Your SportSync Verification Code: ${otp}`,
+        htmlContent: getAppleEmailTemplate(name, otp),
+      }),
+    });
+
+    clearTimeout(timeoutId);
+    const data = await res.json();
+
+    if (res.ok && (data.messageId || data.id)) {
+      console.log(`[Brevo HTTP] ✅ Real email sent via Brevo to ${email} (Id: ${data.messageId || data.id})`);
+      return { success: true, delivered: true, id: data.messageId || data.id };
+    } else {
+      const detail = data?.message || JSON.stringify(data);
+      console.error("[Brevo HTTP] ⚠️ Brevo returned error:", detail);
+      return { success: false, delivered: false, error: `Brevo API: ${detail}` };
+    }
+  } catch (err) {
+    console.error("[Brevo HTTP] ⚠️ Request failed:", err.message);
+    return { success: false, delivered: false, error: `Brevo Network Error: ${err.message}` };
+  }
+}
+
+/**
  * High-Performance Email Dispatcher
- * Primary #1: Google SMTP (Nodemailer)
- * Secondary #2: Resend HTTPS (if configured)
+ * Priority:
+ * 1. Brevo HTTPS API (if BREVO_API_KEY set — can send to ANY email)
+ * 2. Resend HTTPS API (if RESEND_API_KEY set — fast, sends to account email or verified domain)
+ * 3. Google SMTP (if EMAIL_USER/EMAIL_PASS set — requires cloud host to permit outbound port 465/587)
  */
 async function sendOtpEmail(email, name, otp) {
   let lastError = "";
 
-  // 1. Primary: Google SMTP (Gmail)
+  // 1. Try Brevo HTTPS REST API (Universal recipient delivery over Port 443)
+  if (process.env.BREVO_API_KEY) {
+    console.log(`[Email Service] Delivering via Brevo HTTPS for ${email}...`);
+    const brevoResult = await sendViaBrevoHttp(process.env.BREVO_API_KEY, email, name, otp);
+    if (brevoResult.success) {
+      return brevoResult;
+    }
+    lastError = brevoResult.error;
+    console.warn(`[Email Service] Brevo delivery failed: ${lastError}`);
+  }
+
+  // 2. Try Resend HTTPS REST API (Port 443)
+  if (process.env.RESEND_API_KEY) {
+    console.log(`[Email Service] Delivering via Resend HTTPS for ${email}...`);
+    const resendResult = await sendViaResendHttp(process.env.RESEND_API_KEY, email, name, otp);
+    if (resendResult.success) {
+      return resendResult;
+    }
+    lastError = lastError ? `${lastError} | ${resendResult.error}` : resendResult.error;
+    console.warn(`[Email Service] Resend HTTPS failed: ${resendResult.error}`);
+  }
+
+  // 3. Try Google SMTP (Gmail)
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     console.log(`[Email Service] Delivering via Google SMTP for ${email}...`);
     const smtpResult = await sendViaGoogleSmtp(email, name, otp);
     if (smtpResult.success) {
       return smtpResult;
     }
-    lastError = `Google SMTP: ${smtpResult.error}`;
-  } else {
-    lastError = "Google SMTP not configured (EMAIL_USER & EMAIL_PASS missing in Render).";
+    lastError = lastError ? `${lastError} | ${smtpResult.error}` : smtpResult.error;
   }
 
-  // 2. Secondary: Resend HTTPS API (if configured)
-  if (process.env.RESEND_API_KEY) {
-    console.log(`[Email Service] Trying secondary Resend HTTPS for ${email}...`);
-    const resendResult = await sendViaResendHttp(process.env.RESEND_API_KEY, email, name, otp);
-    if (resendResult.success) {
-      return resendResult;
-    }
-    lastError = `${lastError} | Resend: ${resendResult.error}`;
+  if (!lastError) {
+    lastError = "Email service not configured. Please set RESEND_API_KEY (or BREVO_API_KEY / EMAIL_USER) in Render Environment Variables.";
   }
 
-  // 3. Strict failure response — No OTP leak
   console.error(`[Email Service] ❌ Failed to dispatch verification email to ${email}: ${lastError}`);
 
   return {
