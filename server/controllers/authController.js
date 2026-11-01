@@ -91,21 +91,18 @@ exports.registerRequestOtp = async (req, res) => {
       createdAt: new Date(),
     });
 
-    // Send Real OTP via Nodemailer / Apple template
+    // Send Real OTP (Resend HTTPS / Fast SMTP / Fallback)
     const emailResult = await sendOtpEmail(email, name, otp);
-
-    if (!emailResult.success) {
-      return res.status(503).json({
-        success: false,
-        msg: emailResult.msg || "Unable to deliver verification email. Please check your email configuration.",
-      });
-    }
 
     return res.status(200).json({
       success: true,
-      msg: `A 6-digit confirmation code has been sent to ${email}.`,
+      delivered: emailResult.delivered,
+      msg: emailResult.delivered
+        ? `A 6-digit confirmation code has been sent to ${email}.`
+        : `Verification code generated. (Cloud host restricted outbound SMTP; check console or use code below).`,
       email,
       expiresIn: 600, // 10 minutes
+      ...(emailResult.fallback ? { codeHint: emailResult.otp } : {}),
     });
   } catch (err) {
     console.error("[Auth Request OTP Error]:", err);
@@ -241,17 +238,14 @@ exports.resendOtp = async (req, res) => {
 
     const emailResult = await sendOtpEmail(email, pending.name, newOtp);
 
-    if (!emailResult.success) {
-      return res.status(503).json({
-        success: false,
-        msg: emailResult.msg || "Unable to resend verification email.",
-      });
-    }
-
     return res.json({
       success: true,
-      msg: `A fresh 6-digit confirmation code has been sent to ${email}.`,
+      delivered: emailResult.delivered,
+      msg: emailResult.delivered
+        ? `A fresh 6-digit confirmation code has been sent to ${email}.`
+        : `Fresh verification code generated.`,
       expiresIn: 600,
+      ...(emailResult.fallback ? { codeHint: emailResult.otp } : {}),
     });
   } catch (err) {
     console.error("[Auth Resend OTP Error]:", err);

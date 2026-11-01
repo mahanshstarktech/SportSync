@@ -39,6 +39,7 @@ export default function Register() {
   const [otpDigits, setOtpDigits] = useState(["", "", "", "", "", ""]);
   const [countdown, setCountdown] = useState(60);
   const [resending, setResending] = useState(false);
+  const [codeHint, setCodeHint] = useState("");
 
   const digitRefs = useRef([]);
 
@@ -125,7 +126,14 @@ export default function Register() {
         setStep("otp");
         setCountdown(60);
         setOtpDigits(["", "", "", "", "", ""]);
-        setSuccessNotice(`Verification code sent to ${trimmedEmail}`);
+        setSuccessNotice(
+          res.data.delivered
+            ? `Verification code sent to ${trimmedEmail}`
+            : "Verification code generated! Please enter the code below."
+        );
+        if (res.data.codeHint) {
+          setCodeHint(res.data.codeHint);
+        }
       } else {
         setErrorMsg(res.data?.msg || "Unable to send verification code. Please try again.");
       }
@@ -244,7 +252,14 @@ export default function Register() {
       if (res.data?.success) {
         setCountdown(60);
         setOtpDigits(["", "", "", "", "", ""]);
-        setSuccessNotice("A fresh verification code has been sent!");
+        setSuccessNotice(
+          res.data.delivered
+            ? "A fresh verification code has been sent!"
+            : "Fresh verification code generated!"
+        );
+        if (res.data.codeHint) {
+          setCodeHint(res.data.codeHint);
+        }
         digitRefs.current[0]?.focus();
       } else {
         setErrorMsg(res.data?.msg || "Unable to resend verification code.");
@@ -495,6 +510,26 @@ export default function Register() {
                       {form.email}
                     </p>
                   </div>
+
+                  {codeHint && (
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
+                      <span className="leading-snug">
+                        Cloud host restricted outbound SMTP. Code:{" "}
+                        <strong className="font-mono tracking-widest text-sm font-bold">{codeHint}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const arr = codeHint.split("");
+                          setOtpDigits(arr);
+                          executeVerify(codeHint);
+                        }}
+                        className="ml-2 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-semibold text-[11px] shrink-0 transition-colors"
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                  )}
 
                   {/* 6 Digit Input Boxes */}
                   <div>
