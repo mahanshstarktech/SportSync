@@ -45,3 +45,4 @@ export default function SafeGoogleMapsWrapper({ children }) {
     </GoogleMapsErrorBoundary>
   );
 }
+
