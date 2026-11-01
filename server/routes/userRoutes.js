@@ -59,11 +59,15 @@ router.get("/:id", auth, async (req, res, next) => {
 // PUT /api/users/me
 router.put("/me", auth, async (req, res, next) => {
   try {
-    const { name, sports, skillLevel, location } = req.body;
+    const updateData = {};
+    if (req.body.name !== undefined) updateData.name = req.body.name.trim();
+    if (req.body.sports !== undefined) updateData.sports = req.body.sports;
+    if (req.body.skillLevel !== undefined) updateData.skillLevel = req.body.skillLevel;
+    if (req.body.location !== undefined) updateData.location = req.body.location;
 
     const updated = await User.findByIdAndUpdate(
       req.user,
-      { $set: { name, sports, skillLevel, location } },
+      { $set: updateData },
       { new: true, runValidators: true }
     ).select("-password");
 

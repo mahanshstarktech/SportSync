@@ -5,16 +5,32 @@ const Message = require("../models/Message");
 module.exports = function initSocket(server) {
   const { Server } = require("socket.io");
 
-const io = new Server(server, {
-  cors: {
-    origin: [
-      "http://localhost:3000",
-      "https://sportssync.netlify.app"
-    ],
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
+  const allowedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "https://sportssync.netlify.app",
+    ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",").map(s => s.trim()) : [])
+  ];
+
+  const io = new Server(server, {
+    cors: {
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (
+          allowedOrigins.includes(origin) ||
+          /\.pages\.dev$/.test(origin) ||
+          origin.includes("localhost") ||
+          origin.includes("127.0.0.1")
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
+      methods: ["GET", "POST"],
+      credentials: true
+    }
+  });
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;

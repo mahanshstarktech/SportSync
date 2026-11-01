@@ -11,14 +11,26 @@ const cleanupOldMatches = require("./jobs/cleanupMatches");
 
 dotenv.config();
 
-// ✅ Check required env variables
-const REQUIRED_ENV = ["MONGO_URI", "JWT_SECRET"];
-REQUIRED_ENV.forEach((key) => {
-  if (!process.env[key]) {
-    console.error(`Missing required environment variable: ${key}`);
+// ✅ Environment checks
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    console.error("FATAL: JWT_SECRET environment variable is required in production!");
     process.exit(1);
+  } else {
+    process.env.JWT_SECRET = "sportsync_dev_secret_jwt_key_2026";
+    console.warn("⚠️ Warning: JWT_SECRET not set, using temporary development secret.");
   }
-});
+}
+
+if (!process.env.MONGO_URI) {
+  if (process.env.NODE_ENV === "production") {
+    console.error("FATAL: MONGO_URI environment variable is required in production!");
+    process.exit(1);
+  } else {
+    process.env.MONGO_URI = "mongodb://127.0.0.1:27017/sportsync";
+    console.warn("⚠️ Warning: MONGO_URI not set, defaulting to local mongodb://127.0.0.1:27017/sportsync");
+  }
+}
 
 // ✅ Connect DB
 connectDB();
@@ -26,28 +38,50 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
+// ✅ Reverse proxy trust (Render / Cloudflare)
+app.set("trust proxy", 1);
+
 // ✅ Init Socket.io
 const io = initSocket(server);
 app.set("io", io);
-app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://sportssync.netlify.app"
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
 
-// ✅ Preflight fix (important)
+// ✅ CORS Configuration for Cloudflare Pages, Netlify & Localhost
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:5173",
+  "https://sportssync.netlify.app",
+  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(",").map((s) => s.trim()) : [])
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        /\.pages\.dev$/.test(origin) ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+  })
+);
+
 // ✅ Middleware
 app.use(express.json());
 
 // ✅ Rate limiter for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { success: false, msg: "Too many requests, try again after 15 minutes" },
+  max: process.env.NODE_ENV === "production" ? 50 : 200,
+  message: { success: false, msg: "Too many authentication requests, please try again in 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -63,9 +97,25 @@ app.use("/api/activity",      require("./routes/activityRoutes"));
 app.use("/api/tournaments",   require("./routes/tournamentRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
 
-// ✅ Health route (helps Render detect service)
+// ✅ Health route (Render and Cloudflare status monitor)
 app.get("/", (req, res) => {
-  res.send("API running 🚀");
+  res.json({
+    status: "ok",
+    service: "SportSync API",
+    version: "2.0.0",
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/health", (req, res) => {
+  const mongoose = require("mongoose");
+  const isConnected = mongoose.connection.readyState === 1;
+  res.status(isConnected ? 200 : 503).json({
+    status: isConnected ? "healthy" : "degraded",
+    database: isConnected ? "connected" : "disconnected",
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ✅ Error handler
@@ -96,8 +146,7 @@ cron.schedule("* * * * *", async () => {
       .populate("createdBy", "name");
 
     for (const match of upcomingMatches) {
-      const approvedPlayers = match.players.filter(p => p.status === "approved");
-
+      const approvedPlayers = match.players.filter((p) => p.status === "approved");
       console.log(`[Cron] Sending starting soon notification for match: ${match.sport}`);
 
       for (const player of approvedPlayers) {
@@ -121,21 +170,12 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-//write here
-
-
-
-
-
-
-
-
 // ✅ Initial cleanup run
 cleanupOldMatches();
 
-// ✅ Start server (Render compatible)
-const PORT = process.env.PORT || 5000;
+// ✅ Start server (Render uses PORT env var, macOS defaults to 5001 to avoid AirPlay port 5000 conflict)
+const PORT = process.env.PORT || 5001;
 
 server.listen(PORT, () => {
-  console.log(`Server + Socket.io running on port ${PORT}`);
+  console.log(`🚀 SportSync Server + Socket.io running on port ${PORT}`);
 });
